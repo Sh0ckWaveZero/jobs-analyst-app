@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/sheet'
 import type { IssueRow } from '@/features/issues/issues.server'
 import { LogWorkDrawer } from '@/features/time-entries/log-work-drawer'
+import { IssueWorklogDrawer } from '@/features/time-entries/issue-worklog-drawer'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -172,9 +173,14 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                   {issue.dueDate ?? '—'}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                  {issue.totalMinutes > 0
-                    ? `${Math.floor(issue.totalMinutes / 60)}h ${issue.totalMinutes % 60}m`
-                    : '—'}
+                  {issue.totalMinutes > 0 ? (
+                    <IssueWorklogDrawer
+                      issue={issue}
+                      totalMinutes={issue.totalMinutes}
+                    />
+                  ) : (
+                    '—'
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {(canManage ||

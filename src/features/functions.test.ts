@@ -23,8 +23,10 @@ import {
   listMyEntries,
   getRunningEntry,
   getWorkHourAnalysis,
+  listIssueEntries,
   startTimer,
   stopTimer,
+  updateEntry,
 } from './time-entries/time-entries.functions'
 import {
   createDepartment,
@@ -58,6 +60,8 @@ describe('server function wrappers', () => {
       deleteEntry,
       getMyWeekMinutes,
       listMyEntries,
+      listIssueEntries,
+      updateEntry,
       getRunningEntry,
       getWorkHourAnalysis,
       startTimer,

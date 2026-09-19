@@ -30,6 +30,17 @@ export const deleteEntryInputSchema = z.object({
   id: z.number().int().positive(),
 })
 
+export const updateEntryInputSchema = z.object({
+  id: z.number().int().positive(),
+  minutes: z.number().int().min(1).max(MAX_MINUTES).optional(),
+  workDate: workDateSchema.optional(),
+  note: z.string().max(300).nullable().optional(),
+})
+
+export const issueEntriesInputSchema = z.object({
+  issueId: z.number().int().positive(),
+})
+
 export const analysisInputSchema = z.object({
   range: analysisRangeSchema,
   projectId: z.number().int().positive().optional(),
@@ -42,4 +53,5 @@ export const myEntriesInputSchema = z.object({
 export type StartTimerInput = z.infer<typeof startTimerInputSchema>
 export type StopTimerInput = z.infer<typeof stopTimerInputSchema>
 export type AddManualEntryInput = z.infer<typeof addManualEntryInputSchema>
+export type UpdateEntryInput = z.infer<typeof updateEntryInputSchema>
 export type AnalysisInput = z.infer<typeof analysisInputSchema>

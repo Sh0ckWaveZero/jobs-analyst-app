@@ -6,7 +6,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 
 import { ProjectDetailPage } from './project-detail-page'
 import { getProjects } from './projects.functions'
-import { addManualEntry } from '@/features/time-entries/time-entries.functions'
+import {
+  addManualEntry,
+  listIssueEntries,
+} from '@/features/time-entries/time-entries.functions'
 import {
   createIssue,
   deleteIssue,
@@ -47,6 +50,9 @@ vi.mock('@/features/users/users.functions', () => ({
 }))
 vi.mock('@/features/time-entries/time-entries.functions', () => ({
   addManualEntry: vi.fn(),
+  listIssueEntries: vi.fn(),
+  updateEntry: vi.fn(),
+  deleteEntry: vi.fn(),
 }))
 
 const projectsFixture = {
@@ -100,6 +106,7 @@ beforeEach(() => {
   vi.mocked(createIssue).mockReset()
   vi.mocked(updateIssue).mockReset()
   vi.mocked(deleteIssue).mockReset()
+  vi.mocked(listIssueEntries).mockResolvedValue([] as never)
   sessionRef.current = { user: { id: 'u1', name: 'Somchai Admin', role: 'admin' } }
 })
 
@@ -118,6 +125,33 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByText('frontend')).toBeInTheDocument()
     expect(screen.getByText('2026-10-08')).toBeInTheDocument()
     expect(screen.getByText('1h 40m')).toBeInTheDocument() // 100 นาที
+  })
+
+  it('กดเวลาในคอลัมน์ Logged → เปิด worklog ของ issue นั้น', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listIssueEntries).mockResolvedValue([
+      {
+        id: 900,
+        userId: 'u8',
+        userName: 'Nok Member',
+        durationMinutes: 100,
+        workDate: '2026-09-15',
+        note: 'งานดีไซน์',
+        startedAt: new Date('2026-09-15T09:00:00Z').toISOString(),
+        running: false,
+      },
+    ] as never)
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByText('1h 40m'))
+    expect(
+      await screen.findByRole('heading', { name: 'Work log' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('งานดีไซน์')).toBeInTheDocument()
+    expect(listIssueEntries).toHaveBeenCalledWith({
+      data: { issueId: 102 },
+    })
   })
 
   it('โปรเจกต์ไม่มี issue → empty state', async () => {

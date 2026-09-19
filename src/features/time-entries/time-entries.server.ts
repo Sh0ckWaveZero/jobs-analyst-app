@@ -10,6 +10,7 @@ import type {
   AnalysisRange,
   StartTimerInput,
   StopTimerInput,
+  UpdateEntryInput,
 } from './time-entries.schema'
 
 const RANGE_DAYS: Record<AnalysisRange, number> = {
@@ -180,6 +181,82 @@ export async function deleteEntryRecord(session: AuthSession, id: number) {
   }
   await db.delete(timeEntries).where(eq(timeEntries.id, id))
   return { ok: true as const }
+}
+
+/** ประวัติเวลาราย issue (แบบ worklog ของ Jira) — อ่านได้ทุก role ที่ล็อกอิน */
+export async function listIssueEntriesRecord(issueId: number) {
+  await requireSession()
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  return db
+    .select({
+      id: timeEntries.id,
+      userId: timeEntries.userId,
+      userName: user.name,
+      durationMinutes: timeEntries.durationMinutes,
+      workDate: timeEntries.workDate,
+      note: timeEntries.note,
+      startedAt: timeEntries.startedAt,
+      running: sql<boolean>`(${timeEntries.endedAt} is null)`,
+    })
+    .from(timeEntries)
+    .leftJoin(user, eq(user.id, timeEntries.userId))
+    .where(eq(timeEntries.issueId, issueId))
+    .orderBy(desc(timeEntries.startedAt))
+}
+
+export type IssueEntryRow = Awaited<
+  ReturnType<typeof listIssueEntriesRecord>
+>[number]
+
+/** แก้ไขรายการเวลา — เจ้าของรายการหรือ admin เท่านั้น */
+export async function updateEntryRecord(
+  session: AuthSession,
+  input: UpdateEntryInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const [entry] = await db
+    .select()
+    .from(timeEntries)
+    .where(eq(timeEntries.id, input.id))
+    .limit(1)
+  if (!entry) throw new Error('Entry not found')
+  if (entry.userId !== session.user.id && session.user.role !== 'admin') {
+    throw new Error('Forbidden')
+  }
+
+  let startedAt = entry.startedAt
+  if (input.workDate && input.workDate !== entry.workDate) {
+    const [y, m, d] = input.workDate.split('-').map(Number)
+    if (!y || !m || !d) throw new Error('invalid workDate')
+    startedAt = new Date(
+      y,
+      m - 1,
+      d,
+      entry.startedAt.getHours(),
+      entry.startedAt.getMinutes(),
+    )
+  }
+  const minutes = input.minutes ?? entry.durationMinutes
+  const endedAt = entry.endedAt
+    ? new Date(startedAt.getTime() + minutes * 60_000)
+    : null
+
+  const [row] = await db
+    .update(timeEntries)
+    .set({
+      durationMinutes: minutes,
+      workDate: input.workDate ?? entry.workDate,
+      note: input.note === undefined ? entry.note : input.note,
+      startedAt,
+      endedAt,
+    })
+    .where(eq(timeEntries.id, input.id))
+    .returning()
+  return row
 }
 
 export async function listMyEntriesRecord(limit = 20) {
