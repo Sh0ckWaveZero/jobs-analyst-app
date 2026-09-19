@@ -35,6 +35,14 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -126,29 +134,35 @@ function NewUserForm() {
       }),
   })
 
-  if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)} className="self-start">
-        <Plus className="size-4" /> New user
-      </Button>
-    )
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (next) form.reset()
   }
 
   return (
-    <Form {...form}>
-      <form
-        className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4"
-        onSubmit={form.handleSubmit((values) => mut.mutate(values))}
-        noValidate
-      >
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger asChild>
+        <Button className="self-start">
+          <Plus className="size-4" /> New user
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>New user</SheetTitle>
+          <SheetDescription>สร้างบัญชีผู้ใช้ใหม่และกำหนดสิทธิ์</SheetDescription>
+        </SheetHeader>
+        <Form {...form}>
+          <form
+            className="flex flex-col gap-4 px-4"
+            onSubmit={form.handleSubmit((values) => mut.mutate(values))}
+            noValidate
+          >
         <FormField
           control={form.control}
           name="name"
           render={({ field }) => (
-            <FormItem className="w-44">
-              <FormLabel className="text-xs text-muted-foreground">
-                Name
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input placeholder="Somchai Admin" {...field} />
               </FormControl>
@@ -160,10 +174,8 @@ function NewUserForm() {
           control={form.control}
           name="email"
           render={({ field }) => (
-            <FormItem className="w-56">
-              <FormLabel className="text-xs text-muted-foreground">
-                Email
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Email</FormLabel>
               <FormControl>
                 <Input type="email" placeholder="name@company.com" {...field} />
               </FormControl>
@@ -175,10 +187,8 @@ function NewUserForm() {
           control={form.control}
           name="password"
           render={({ field }) => (
-            <FormItem className="w-44">
-              <FormLabel className="text-xs text-muted-foreground">
-                Password
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Password</FormLabel>
               <FormControl>
                 <Input type="password" placeholder="••••••••" {...field} />
               </FormControl>
@@ -190,10 +200,8 @@ function NewUserForm() {
           control={form.control}
           name="role"
           render={({ field }) => (
-            <FormItem className="w-32">
-              <FormLabel className="text-xs text-muted-foreground">
-                Role
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Role</FormLabel>
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl>
                   <SelectTrigger className="w-full">
@@ -216,10 +224,8 @@ function NewUserForm() {
           control={form.control}
           name="departmentId"
           render={({ field }) => (
-            <FormItem className="w-40">
-              <FormLabel className="text-xs text-muted-foreground">
-                Department
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Department</FormLabel>
               <Select
                 value={field.value || 'none'}
                 onValueChange={(v) => field.onChange(v === 'none' ? '' : v)}
@@ -242,21 +248,27 @@ function NewUserForm() {
             </FormItem>
           )}
         />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={mut.isPending}>
-            Create
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-        </div>
-        {form.formState.errors.root && (
-          <p className="w-full text-sm text-destructive">
-            {form.formState.errors.root.message}
-          </p>
-        )}
-      </form>
-    </Form>
+            {form.formState.errors.root && (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.root.message}
+              </p>
+            )}
+            <div className="flex gap-2 pb-4">
+              <Button type="submit" disabled={mut.isPending}>
+                Create user
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
   )
 }
 

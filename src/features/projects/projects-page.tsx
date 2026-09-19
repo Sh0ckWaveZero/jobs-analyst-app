@@ -25,6 +25,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 
 function formatMinutes(total: number) {
   const h = Math.floor(total / 60)
@@ -126,84 +134,89 @@ function NewProjectForm() {
       }),
   })
 
-  if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)}>
-        <Plus className="size-4" /> New project
-      </Button>
-    )
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (next) form.reset()
   }
 
   return (
-    <Form {...form}>
-      <form
-        className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4"
-        onSubmit={form.handleSubmit((values) => mut.mutate(values))}
-        noValidate
-      >
-        <FormField
-          control={form.control}
-          name="key"
-          render={({ field }) => (
-            <FormItem className="w-24">
-              <FormLabel className="text-xs text-muted-foreground">
-                Key
-              </FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="WEB"
-                  {...field}
-                  onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem className="w-48">
-              <FormLabel className="text-xs text-muted-foreground">
-                Name
-              </FormLabel>
-              <FormControl>
-                <Input placeholder="Website Revamp" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem className="w-56">
-              <FormLabel className="text-xs text-muted-foreground">
-                Description (optional)
-              </FormLabel>
-              <FormControl>
-                <Input {...field} value={field.value ?? ''} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={mut.isPending}>
-            Create
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-        </div>
-        {form.formState.errors.root && (
-          <p className="w-full text-sm text-destructive">
-            {form.formState.errors.root.message}
-          </p>
-        )}
-      </form>
-    </Form>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger asChild>
+        <Button>
+          <Plus className="size-4" /> New project
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>New project</SheetTitle>
+          <SheetDescription>สร้างโปรเจกต์ใหม่เพื่อเริ่มจัดการงาน</SheetDescription>
+        </SheetHeader>
+        <Form {...form}>
+          <form
+            id="new-project-form"
+            className="flex flex-col gap-4 px-4"
+            onSubmit={form.handleSubmit((values) => mut.mutate(values))}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="key"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Key</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="WEB"
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Website Revamp" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (optional)</FormLabel>
+                  <FormControl>
+                    <Input {...field} value={field.value ?? ''} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            {form.formState.errors.root && (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.root.message}
+              </p>
+            )}
+            <div className="flex gap-2 pb-4">
+              <Button type="submit" disabled={mut.isPending}>
+                Create project
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
   )
 }

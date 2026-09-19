@@ -15,6 +15,15 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import type { IssueRow } from '@/features/issues/issues.server'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -166,6 +175,11 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-right">
+                  {(canManage ||
+                    session?.user.id === issue.reporterId ||
+                    session?.user.id === issue.assigneeId) && (
+                    <EditIssueDrawer issue={issue} />
+                  )}
                   {canManage && <DeleteIssueButton issueId={issue.id} />}
                 </td>
               </tr>
@@ -307,29 +321,35 @@ function NewIssueForm({ projectId }: { projectId: number }) {
       }),
   })
 
-  if (!open) {
-    return (
-      <Button onClick={() => setOpen(true)}>
-        <Plus className="size-4" /> New issue
-      </Button>
-    )
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (next) form.reset()
   }
 
   return (
-    <Form {...form}>
-      <form
-        className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4"
-        onSubmit={form.handleSubmit((values) => mut.mutate(values))}
-        noValidate
-      >
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger asChild>
+        <Button>
+          <Plus className="size-4" /> New issue
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>New issue</SheetTitle>
+          <SheetDescription>สร้าง issue ใหม่ในโปรเจกต์นี้</SheetDescription>
+        </SheetHeader>
+        <Form {...form}>
+          <form
+            className="flex flex-col gap-4 px-4"
+            onSubmit={form.handleSubmit((values) => mut.mutate(values))}
+            noValidate
+          >
         <FormField
           control={form.control}
           name="title"
           render={({ field }) => (
-            <FormItem className="w-64">
-              <FormLabel className="text-xs text-muted-foreground">
-                Title
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Title</FormLabel>
               <FormControl>
                 <Input placeholder="What needs to be done?" {...field} />
               </FormControl>
@@ -341,10 +361,8 @@ function NewIssueForm({ projectId }: { projectId: number }) {
           control={form.control}
           name="priority"
           render={({ field }) => (
-            <FormItem className="flex flex-col gap-1.5 text-sm">
-              <FormLabel className="text-xs text-muted-foreground">
-                Priority
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Priority</FormLabel>
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl>
                   <SelectTrigger className="w-28">
@@ -365,10 +383,8 @@ function NewIssueForm({ projectId }: { projectId: number }) {
           control={form.control}
           name="assigneeId"
           render={({ field }) => (
-            <FormItem className="flex w-44 flex-col gap-1.5 text-sm">
-              <FormLabel className="text-xs text-muted-foreground">
-                Assignee
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Assignee</FormLabel>
               <Select
                 value={field.value || 'none'}
                 onValueChange={field.onChange}
@@ -395,10 +411,8 @@ function NewIssueForm({ projectId }: { projectId: number }) {
           control={form.control}
           name="dueDate"
           render={({ field }) => (
-            <FormItem className="flex flex-col gap-1.5 text-sm">
-              <FormLabel className="text-xs text-muted-foreground">
-                Due date
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Due date</FormLabel>
               <FormControl>
                 <Input type="date" {...field} />
               </FormControl>
@@ -410,10 +424,8 @@ function NewIssueForm({ projectId }: { projectId: number }) {
           control={form.control}
           name="labels"
           render={({ field }) => (
-            <FormItem className="w-48">
-              <FormLabel className="text-xs text-muted-foreground">
-                Labels (comma)
-              </FormLabel>
+            <FormItem>
+              <FormLabel>Labels (comma)</FormLabel>
               <FormControl>
                 <Input placeholder="frontend, api" {...field} />
               </FormControl>
@@ -421,20 +433,265 @@ function NewIssueForm({ projectId }: { projectId: number }) {
             </FormItem>
           )}
         />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={mut.isPending}>
-            Create
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-        </div>
-        {form.formState.errors.root && (
-          <p className="w-full text-sm text-destructive">
-            {form.formState.errors.root.message}
-          </p>
-        )}
-      </form>
-    </Form>
+            {form.formState.errors.root && (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.root.message}
+              </p>
+            )}
+            <div className="flex gap-2 pb-4">
+              <Button type="submit" disabled={mut.isPending}>
+                Create issue
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+const editIssueFormSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(200),
+  status: z.enum(['backlog', 'todo', 'in_progress', 'review', 'done']),
+  priority: z.enum(['low', 'medium', 'high']),
+  assigneeId: z.string(),
+  dueDate: z.string(),
+  labels: z.string().max(200),
+})
+
+type EditIssueFormValues = z.infer<typeof editIssueFormSchema>
+
+function EditIssueDrawer({ issue }: { issue: IssueRow }) {
+  const qc = useQueryClient()
+  const update = useServerFn(updateIssue)
+  const assignable = useServerFn(getAssignableUsers)
+  const [open, setOpen] = useState(false)
+
+  const qAssignable = useQuery({
+    queryKey: ['pm', 'assignable'],
+    queryFn: () => assignable(),
+    enabled: open,
+  })
+
+  const form = useForm<EditIssueFormValues>({
+    resolver: zodResolver(editIssueFormSchema),
+    defaultValues: {
+      title: issue.title,
+      status: issue.status,
+      priority: issue.priority,
+      assigneeId: issue.assigneeId ?? 'none',
+      dueDate: issue.dueDate ?? '',
+      labels: issue.labels.join(', '),
+    },
+  })
+
+  const mut = useMutation({
+    mutationFn: (values: EditIssueFormValues) =>
+      update({
+        data: {
+          id: issue.id,
+          title: values.title,
+          status: values.status,
+          priority: values.priority,
+          assigneeId:
+            values.assigneeId && values.assigneeId !== 'none'
+              ? values.assigneeId
+              : null,
+          dueDate: values.dueDate || null,
+          labels: values.labels
+            ? values.labels
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [],
+        },
+      }),
+    onSuccess: () => {
+      setOpen(false)
+      qc.invalidateQueries({ queryKey: ['pm'] })
+    },
+    onError: (err) =>
+      form.setError('root', {
+        message: err instanceof Error ? err.message : 'Failed to update',
+      }),
+  })
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (next) {
+      form.reset({
+        title: issue.title,
+        status: issue.status,
+        priority: issue.priority,
+        assigneeId: issue.assigneeId ?? 'none',
+        dueDate: issue.dueDate ?? '',
+        labels: issue.labels.join(', '),
+      })
+    }
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+          Edit
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>Edit issue</SheetTitle>
+          <SheetDescription>
+            {issue.key} · {issue.projectName}
+          </SheetDescription>
+        </SheetHeader>
+        <Form {...form}>
+          <form
+            className="flex flex-col gap-4 px-4"
+            onSubmit={form.handleSubmit((values) => mut.mutate(values))}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Title</FormLabel>
+                  <FormControl>
+                    <Input placeholder="What needs to be done?" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {(Object.keys(STATUS_LABELS) as IssueStatus[]).map(
+                        (s) => (
+                          <SelectItem key={s} value={s}>
+                            {STATUS_LABELS[s]}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Priority</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="low">low</SelectItem>
+                      <SelectItem value="medium">medium</SelectItem>
+                      <SelectItem value="high">high</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="assigneeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Assignee</FormLabel>
+                  <Select
+                    value={field.value || 'none'}
+                    onValueChange={field.onChange}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {(qAssignable.data ?? []).map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="dueDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Due date</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="labels"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Labels (comma)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="frontend, api" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            {form.formState.errors.root && (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.root.message}
+              </p>
+            )}
+            <div className="flex gap-2 pb-4">
+              <Button type="submit" disabled={mut.isPending}>
+                Save changes
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
   )
 }
