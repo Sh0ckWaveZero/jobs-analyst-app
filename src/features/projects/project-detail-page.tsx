@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowLeft, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 
 import {
   Form,
@@ -215,7 +216,14 @@ function StatusSelect({
   const mut = useMutation({
     mutationFn: (status: IssueStatus) =>
       update({ data: { id: issueId, status } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: (_data, status) => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success(`อัปเดตสถานะเป็น ${STATUS_LABELS[status]} แล้ว`)
+    },
+    onError: (err) =>
+      toast.error('เปลี่ยนสถานะไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   return (
@@ -243,7 +251,14 @@ function DeleteIssueButton({ issueId }: { issueId: number }) {
   const del = useServerFn(deleteIssue)
   const mut = useMutation({
     mutationFn: () => del({ data: { id: issueId } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('ลบ issue แล้ว')
+    },
+    onError: (err) =>
+      toast.error('ลบ issue ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   return (
@@ -314,11 +329,16 @@ function NewIssueForm({ projectId }: { projectId: number }) {
       setOpen(false)
       form.reset()
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('สร้าง issue แล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create',
-      }),
+      })
+      toast.error('สร้าง issue ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   function handleOpenChange(next: boolean) {
@@ -516,11 +536,16 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
     onSuccess: () => {
       setOpen(false)
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('บันทึกการแก้ไข issue แล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to update',
-      }),
+      })
+      toast.error('แก้ไข issue ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   function handleOpenChange(next: boolean) {

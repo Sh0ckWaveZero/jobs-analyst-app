@@ -13,3 +13,5 @@ __unconfig*
 todos.json
 
 .zcode
+coverage
+gui-test-screenshots

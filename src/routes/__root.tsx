@@ -3,15 +3,18 @@ import {
   Link,
   Outlet,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 
 import appCss from '../styles.css?url'
+import { Toaster } from '@/components/ui/sonner'
 
-const queryClient = new QueryClient()
-
-export const Route = createRootRoute({
+// queryClient มาจาก router context (สร้างใน src/router.tsx)
+// QueryClientProvider ถูก wrap โดย setupRouterSsrQueryIntegration
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
   head: () => ({
     meta: [
       {
@@ -39,9 +42,10 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <Outlet />
-    </QueryClientProvider>
+      <Toaster />
+    </>
   )
 }
 

@@ -21,6 +21,7 @@ import {
   Pause,
   Play,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -362,7 +363,12 @@ function TimeTrackerCard() {
     onSuccess: (_data, variables) => {
       form.reset({ projectId: variables.projectId, issueId: '', note: '' })
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('เริ่มจับเวลาแล้ว')
     },
+    onError: (err) =>
+      toast.error('เริ่มจับเวลาไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
   const stopMut = useMutation({
     mutationFn: () => {
@@ -370,7 +376,14 @@ function TimeTrackerCard() {
       if (!id) throw new Error('No running timer')
       return stop({ data: { entryId: id } })
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('หยุดจับเวลาและบันทึกรายการแล้ว')
+    },
+    onError: (err) =>
+      toast.error('หยุดจับเวลาไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   const hhmmss = (s: number) =>
@@ -496,13 +509,6 @@ function TimeTrackerCard() {
             </Button>
           </form>
         </Form>
-      )}
-      {startMut.isError && (
-        <p className="mt-3 text-sm text-destructive">
-          {startMut.error instanceof Error
-            ? startMut.error.message
-            : 'Failed to start'}
-        </p>
       )}
     </Card>
   )
