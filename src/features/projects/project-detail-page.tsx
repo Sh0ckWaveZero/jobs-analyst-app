@@ -25,6 +25,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import type { IssueRow } from '@/features/issues/issues.server'
+import { LogWorkDrawer } from '@/features/time-entries/log-work-drawer'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -179,7 +180,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                   {(canManage ||
                     session?.user.id === issue.reporterId ||
                     session?.user.id === issue.assigneeId) && (
-                    <EditIssueDrawer issue={issue} />
+                    <>
+                      <LogWorkDrawer projectId={pid} issue={issue} />
+                      <EditIssueDrawer issue={issue} />
+                    </>
                   )}
                   {canManage && <DeleteIssueButton issueId={issue.id} />}
                 </td>

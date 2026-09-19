@@ -6,6 +6,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 
 import { ProjectDetailPage } from './project-detail-page'
 import { getProjects } from './projects.functions'
+import { addManualEntry } from '@/features/time-entries/time-entries.functions'
 import {
   createIssue,
   deleteIssue,
@@ -43,6 +44,9 @@ vi.mock('@/features/users/users.functions', () => ({
   getAssignableUsers: vi.fn(async () => [
     { id: 'u8', name: 'Nok Member' },
   ]),
+}))
+vi.mock('@/features/time-entries/time-entries.functions', () => ({
+  addManualEntry: vi.fn(),
 }))
 
 const projectsFixture = {
@@ -124,7 +128,7 @@ describe('ProjectDetailPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('member ที่ไม่เกี่ยวข้องไม่เห็นปุ่ม Edit/delete', async () => {
+  it('member ที่ไม่เกี่ยวข้องไม่เห็นปุ่ม Log/Edit/delete', async () => {
     sessionRef.current = {
       user: { id: 'u77', name: 'Outsider', role: 'member' },
     }
@@ -132,6 +136,42 @@ describe('ProjectDetailPage', () => {
     await screen.findByText('WEB-102')
     expect(screen.queryByText('Edit')).not.toBeInTheDocument()
     expect(screen.queryByText('delete')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Log/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('Log work จากแถว issue → addManualEntry ได้เวลาที่แปลงจาก 1h 45m', async () => {
+    const user = userEvent.setup()
+    vi.mocked(addManualEntry).mockResolvedValue({} as never)
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('button', { name: /Log/ }))
+    expect(
+      await screen.findByRole('heading', { name: 'Log work' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('WEB-102 · Finalize design system tokens'),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Time spent'), '1h 45m')
+    expect(await screen.findByText('= 1h 45m (105 นาที)')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Log work' }))
+
+    await waitFor(() =>
+      expect(addManualEntry).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          projectId: 16,
+          issueId: 102,
+          minutes: 105,
+        }),
+      }),
+    )
+    expect(
+      (await screen.findAllByText(/บันทึกเวลา 1h 45m ให้ WEB-102/)).length,
+    ).toBeGreaterThan(0)
   })
 
   it('สร้าง issue ผ่าน drawer → createIssue ถูกเรียก + toast', async () => {

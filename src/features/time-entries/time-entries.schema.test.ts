@@ -39,15 +39,15 @@ describe('addManualEntryInputSchema', () => {
     expect(addManualEntryInputSchema.parse(valid)).toEqual(valid)
   })
 
-  it('minutes ต้องอยู่ระหว่าง 1–600 นาที', () => {
+  it('minutes ต้องอยู่ระหว่าง 1–1440 นาที (24 ชม.)', () => {
     expect(
       addManualEntryInputSchema.safeParse({ ...valid, minutes: 0 }).success,
     ).toBe(false)
     expect(
-      addManualEntryInputSchema.safeParse({ ...valid, minutes: 601 }).success,
+      addManualEntryInputSchema.safeParse({ ...valid, minutes: 1441 }).success,
     ).toBe(false)
     expect(
-      addManualEntryInputSchema.safeParse({ ...valid, minutes: 600 }).success,
+      addManualEntryInputSchema.safeParse({ ...valid, minutes: 1440 }).success,
     ).toBe(true)
   })
 

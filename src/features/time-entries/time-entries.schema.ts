@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+// จำกัด 24 ชั่วโมงต่อรายการ — ตรงกับ MAX_LOG_MINUTES ใน src/lib/duration.ts
+const MAX_MINUTES = 1440
+
 export const analysisRangeSchema = z.enum(['5D', '2W', '1M', '6M', '1Y'])
 export type AnalysisRange = z.infer<typeof analysisRangeSchema>
 
@@ -19,7 +22,7 @@ export const addManualEntryInputSchema = z.object({
   projectId: z.number().int().positive(),
   issueId: z.number().int().positive().optional(),
   workDate: workDateSchema,
-  minutes: z.number().int().min(1).max(600),
+  minutes: z.number().int().min(1).max(MAX_MINUTES),
   note: z.string().max(300).optional(),
 })
 
