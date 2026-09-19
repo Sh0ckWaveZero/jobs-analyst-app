@@ -1,0 +1,293 @@
+import { and, desc, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm'
+
+import { getDb } from '@/db/client.server'
+import { issues, projects, timeEntries, user } from '@/db/schema'
+import { requireSession } from '@/features/auth/auth.server'
+import type { AuthSession } from '@/features/auth/auth.server'
+import type {
+  AddManualEntryInput,
+  AnalysisInput,
+  AnalysisRange,
+  StartTimerInput,
+  StopTimerInput,
+} from './time-entries.schema'
+
+const RANGE_DAYS: Record<AnalysisRange, number> = {
+  '5D': 5,
+  '2W': 14,
+  '1M': 30,
+  '6M': 180,
+  '1Y': 365,
+}
+
+export function toWorkDate(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** ขอบเขตข้อมูลตามบทบาท: admin ทุกอย่าง, manager ทีมในโปรเจกต์ที่ตัวเองเป็นเจ้าของ + ของตัวเอง, member เฉพาะตัวเอง */
+async function analysisScope(session: AuthSession) {
+  const role = session.user.role
+  if (role === 'admin') return undefined // ไม่จำกัด
+  const db = getDb()!
+  if (role === 'manager') {
+    const owned = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.ownerId, session.user.id))
+    const ownedIds = owned.map((r) => r.id)
+    const conditions = [
+      eq(timeEntries.userId, session.user.id),
+      ...(ownedIds.length ? [inArray(timeEntries.projectId, ownedIds)] : []),
+    ]
+    return or(...conditions)
+  }
+  return eq(timeEntries.userId, session.user.id)
+}
+
+export async function getRunningEntryRecord(session: AuthSession) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const [row] = await db
+    .select({
+      id: timeEntries.id,
+      projectId: timeEntries.projectId,
+      projectKey: projects.key,
+      issueId: timeEntries.issueId,
+      issueNumber: issues.number,
+      issueTitle: issues.title,
+      note: timeEntries.note,
+      startedAt: timeEntries.startedAt,
+    })
+    .from(timeEntries)
+    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .leftJoin(issues, eq(issues.id, timeEntries.issueId))
+    .where(
+      and(eq(timeEntries.userId, session.user.id), isNull(timeEntries.endedAt)),
+    )
+    .orderBy(desc(timeEntries.startedAt))
+    .limit(1)
+  return row ?? null
+}
+
+export async function startTimerRecord(
+  session: AuthSession,
+  input: StartTimerInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const running = await getRunningEntryRecord(session)
+  if (running) {
+    throw new Error('A timer is already running — stop it first')
+  }
+
+  const startedAt = new Date()
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      projectId: input.projectId,
+      issueId: input.issueId,
+      userId: session.user.id,
+      startedAt,
+      endedAt: null,
+      durationMinutes: 0,
+      note: input.note,
+      workDate: toWorkDate(startedAt),
+    })
+    .returning()
+  return row
+}
+
+export async function stopTimerRecord(
+  session: AuthSession,
+  input: StopTimerInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const [entry] = await db
+    .select()
+    .from(timeEntries)
+    .where(eq(timeEntries.id, input.entryId))
+    .limit(1)
+  if (!entry) throw new Error('Entry not found')
+  if (entry.userId !== session.user.id) throw new Error('Forbidden')
+  if (entry.endedAt) throw new Error('Timer already stopped')
+
+  const endedAt = new Date()
+  const durationMinutes = Math.max(
+    1,
+    Math.round((endedAt.getTime() - entry.startedAt.getTime()) / 60_000),
+  )
+  const [row] = await db
+    .update(timeEntries)
+    .set({
+      endedAt,
+      durationMinutes,
+      workDate: toWorkDate(entry.startedAt),
+      updatedAt: endedAt,
+    })
+    .where(eq(timeEntries.id, entry.id))
+    .returning()
+  return row
+}
+
+export async function addManualEntryRecord(
+  session: AuthSession,
+  input: AddManualEntryInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  // workDate ตอน 09:00 ของวันนั้น (เวลาท้องถิ่น) เป็น startedAt ตัวแทน
+  const [y, m, d] = input.workDate.split('-').map(Number)
+  if (!y || !m || !d) throw new Error('invalid workDate')
+  const startedAt = new Date(y, m - 1, d, 9, 0, 0)
+  const endedAt = new Date(startedAt.getTime() + input.minutes * 60_000)
+
+  const [row] = await db
+    .insert(timeEntries)
+    .values({
+      projectId: input.projectId,
+      issueId: input.issueId,
+      userId: session.user.id,
+      startedAt,
+      endedAt,
+      durationMinutes: input.minutes,
+      note: input.note,
+      workDate: input.workDate,
+    })
+    .returning()
+  return row
+}
+
+export async function deleteEntryRecord(session: AuthSession, id: number) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const [entry] = await db
+    .select({ userId: timeEntries.userId })
+    .from(timeEntries)
+    .where(eq(timeEntries.id, id))
+    .limit(1)
+  if (!entry) throw new Error('Entry not found')
+  if (entry.userId !== session.user.id && session.user.role !== 'admin') {
+    throw new Error('Forbidden')
+  }
+  await db.delete(timeEntries).where(eq(timeEntries.id, id))
+  return { ok: true as const }
+}
+
+export async function listMyEntriesRecord(limit = 20) {
+  const session = await requireSession()
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  return db
+    .select({
+      id: timeEntries.id,
+      projectKey: projects.key,
+      issueNumber: issues.number,
+      issueTitle: issues.title,
+      durationMinutes: timeEntries.durationMinutes,
+      workDate: timeEntries.workDate,
+      running: sql<boolean>`(${timeEntries.endedAt} is null)`,
+      startedAt: timeEntries.startedAt,
+    })
+    .from(timeEntries)
+    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .leftJoin(issues, eq(issues.id, timeEntries.issueId))
+    .where(eq(timeEntries.userId, session.user.id))
+    .orderBy(desc(timeEntries.startedAt))
+    .limit(limit)
+}
+
+export type MyEntryRow = Awaited<ReturnType<typeof listMyEntriesRecord>>[number]
+
+export async function getWorkHourAnalysisRecord(
+  session: AuthSession,
+  input: AnalysisInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const days = RANGE_DAYS[input.range]
+  const fromDate = new Date()
+  fromDate.setDate(fromDate.getDate() - (days - 1))
+  fromDate.setHours(0, 0, 0, 0)
+
+  const scope = await analysisScope(session)
+  const filters = [
+    gte(timeEntries.workDate, toWorkDate(fromDate)),
+    ...(input.projectId ? [eq(timeEntries.projectId, input.projectId)] : []),
+  ]
+
+  // รวมต่อวัน
+  const dailyRows = await db
+    .select({
+      workDate: timeEntries.workDate,
+      minutes: sql<number>`sum(${timeEntries.durationMinutes})::int`,
+    })
+    .from(timeEntries)
+    .where(scope ? and(scope, ...filters) : and(...filters))
+    .groupBy(timeEntries.workDate)
+
+  const byDate = new Map(dailyRows.map((r) => [r.workDate, r.minutes]))
+  const series = []
+  for (let i = 0; i < days; i++) {
+    const d = new Date(fromDate)
+    d.setDate(d.getDate() + i)
+    const key = toWorkDate(d)
+    series.push({ date: key, minutes: byDate.get(key) ?? 0 })
+  }
+
+  // breakdown ต่อคน (สำหรับ manager/admin)
+  const perUser =
+    session.user.role === 'member'
+      ? []
+      : await db
+          .select({
+            userId: timeEntries.userId,
+            userName: user.name,
+            minutes: sql<number>`sum(${timeEntries.durationMinutes})::int`,
+          })
+          .from(timeEntries)
+          .innerJoin(user, eq(user.id, timeEntries.userId))
+          .where(scope ? and(scope, ...filters) : and(...filters))
+          .groupBy(timeEntries.userId, user.name)
+          .orderBy(desc(sql`sum(${timeEntries.durationMinutes})`))
+
+  const totalMinutes = series.reduce((acc, s) => acc + s.minutes, 0)
+  return { range: input.range, series, totalMinutes, perUser }
+}
+
+export type WorkHourAnalysis = Awaited<
+  ReturnType<typeof getWorkHourAnalysisRecord>
+>
+
+/** นาทีรวม 7 วันล่าสุดของตัวเอง (การ์ด "Hours this week") */
+export async function getMyWeekMinutesRecord(session: AuthSession) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const from = new Date()
+  from.setDate(from.getDate() - 6)
+  from.setHours(0, 0, 0, 0)
+
+  const [row] = await db
+    .select({
+      minutes: sql<number>`coalesce(sum(${timeEntries.durationMinutes}), 0)::int`,
+    })
+    .from(timeEntries)
+    .where(
+      and(
+        eq(timeEntries.userId, session.user.id),
+        gte(timeEntries.workDate, toWorkDate(from)),
+      ),
+    )
+  return row?.minutes ?? 0
+}

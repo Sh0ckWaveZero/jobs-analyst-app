@@ -1,0 +1,36 @@
+# PostgreSQL สำหรับ jobs-analysis
+# รันบน server: 191.168.100.50
+#   docker compose up -d
+#
+# app connect ผ่าน DATABASE_URL เช่น
+#   postgresql://jobs_analysis:<password>@191.168.100.50:5432/jobs_analysis
+#
+# ตั้งค่า credential ได้ใน .env (docker compose อ่านอัตโนมัติ):
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: jobs-analysis-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jobs_analysis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-jobs_analysis}
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-jobs_analysis} -d ${POSTGRES_DB:-jobs_analysis}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
