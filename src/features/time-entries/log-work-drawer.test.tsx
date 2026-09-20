@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { format } from 'date-fns'
 
 import { LogWorkDrawer } from './log-work-drawer'
@@ -165,6 +165,64 @@ describe('LogWorkDrawer', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument(),
     )
+    expect(addManualEntry).not.toHaveBeenCalled()
+  })
+
+  it('กด Escape / คลิกนอก drawer → time tracking drawer ยังเปิดอยู่', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+
+    await user.click(screen.getByRole('button', { name: /Log/ }))
+    expect(await screen.findByText('Time tracking')).toBeInTheDocument()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent.pointerDown(document.body)
+
+    expect(screen.getByText('Time tracking')).toBeInTheDocument()
+  })
+
+  it('submit โดยไม่ใส่ remaining → timeRemaining undefined', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await user.click(screen.getByRole('button', { name: /Log/ }))
+    await screen.findByText('Time tracking')
+
+    await user.type(screen.getByLabelText('Time spent'), '30m')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(addManualEntry).toHaveBeenCalledWith({
+        data: expect.objectContaining({ remainingEstimateMinutes: undefined }),
+      }),
+    )
+  })
+
+  it('submit fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(addManualEntry).mockRejectedValue('boom')
+    renderDrawer()
+    await user.click(screen.getByRole('button', { name: /Log/ }))
+    await screen.findByText('Time tracking')
+
+    await user.type(screen.getByLabelText('Time spent'), '30m')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      (await screen.findAllByText('บันทึกเวลาไม่สำเร็จ', {}, { timeout: 3000 }))
+        .length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('กด Cancel → ปิด drawer ไม่เรียก server', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await user.click(screen.getByRole('button', { name: /Log/ }))
+    await screen.findByText('Time tracking')
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(
+      await screen.findByRole('button', { name: /Log/ }),
+    ).toBeInTheDocument()
     expect(addManualEntry).not.toHaveBeenCalled()
   })
 })

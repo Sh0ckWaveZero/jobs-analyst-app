@@ -42,6 +42,9 @@ export const updateEntryInputSchema = z.object({
 
 export const issueEntriesInputSchema = z.object({
   issueId: z.number().int().positive(),
+  limit: z.number().int().positive().max(100).optional(),
+  offset: z.number().int().min(0).optional(),
+  userId: z.string().optional(),
 })
 
 export const analysisInputSchema = z.object({
@@ -51,6 +54,7 @@ export const analysisInputSchema = z.object({
 
 export const myEntriesInputSchema = z.object({
   limit: z.number().int().positive().max(100).optional(),
+  offset: z.number().int().min(0).optional(),
 })
 
 export type StartTimerInput = z.infer<typeof startTimerInputSchema>
