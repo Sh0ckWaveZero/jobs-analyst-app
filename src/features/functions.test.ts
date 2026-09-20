@@ -23,6 +23,7 @@ import {
   listMyEntries,
   getRunningEntry,
   getWorkHourAnalysis,
+  getWorkHourReport,
   listIssueEntries,
   startTimer,
   stopTimer,
@@ -64,6 +65,7 @@ describe('server function wrappers', () => {
       updateEntry,
       getRunningEntry,
       getWorkHourAnalysis,
+      getWorkHourReport,
       startTimer,
       stopTimer,
     ].forEach((fn) => expect(typeof fn).toBe('function'))

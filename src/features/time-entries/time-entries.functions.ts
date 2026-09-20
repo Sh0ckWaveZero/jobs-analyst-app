@@ -7,6 +7,7 @@ import {
   getMyWeekMinutesRecord,
   getRunningEntryRecord,
   getWorkHourAnalysisRecord,
+  getWorkHourReportRecord,
   listIssueEntriesRecord,
   listMyEntriesRecord,
   startTimerRecord,
@@ -79,6 +80,13 @@ export const getWorkHourAnalysis = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const session = await requireSession()
     return getWorkHourAnalysisRecord(session, data)
+  })
+
+export const getWorkHourReport = createServerFn({ method: 'GET' })
+  .validator(analysisInputSchema)
+  .handler(async ({ data }) => {
+    const session = await requireSession()
+    return getWorkHourReportRecord(session, data)
   })
 
 export const getMyWeekMinutes = createServerFn({ method: 'GET' }).handler(

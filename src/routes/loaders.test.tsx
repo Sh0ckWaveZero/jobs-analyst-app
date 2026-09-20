@@ -4,6 +4,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { Route as DashboardRoute } from './_app/index'
 import { Route as ProjectsRoute } from './_app/projects.index'
 import { Route as ProjectDetailRoute } from './_app/projects.$projectId'
+import { Route as ReportsRoute } from './_app/reports'
 import { Route as UsersRoute } from './_app/users'
 import { Route as SettingsRoute } from './_app/settings'
 import { getSession } from '@/features/auth/auth.functions'
@@ -13,6 +14,7 @@ import {
   getMyWeekMinutes,
   getRunningEntry,
   getWorkHourAnalysis,
+  getWorkHourReport,
   listMyEntries,
 } from '@/features/time-entries/time-entries.functions'
 import { listDepartments, listUsers } from '@/features/users/users.functions'
@@ -38,6 +40,7 @@ vi.mock('@/features/time-entries/time-entries.functions', () => ({
   getMyWeekMinutes: vi.fn(),
   getRunningEntry: vi.fn(),
   getWorkHourAnalysis: vi.fn(),
+  getWorkHourReport: vi.fn(),
   listMyEntries: vi.fn(),
 }))
 vi.mock('@/features/users/users.functions', () => ({
@@ -62,6 +65,11 @@ beforeEach(() => {
   vi.mocked(getWorkHourAnalysis).mockResolvedValue({
     totalMinutes: 0,
     series: [],
+  } as never)
+  vi.mocked(getWorkHourReport).mockResolvedValue({
+    range: '1M',
+    rows: [],
+    totalMinutes: 0,
   } as never)
   vi.mocked(listMyEntries).mockResolvedValue([] as never)
   vi.mocked(listUsers).mockResolvedValue([] as never)
@@ -139,5 +147,15 @@ describe('route loaders', () => {
     )({ context: { queryClient: qc } })
 
     expect(qc.getQueryData(['pm', 'departments'])).toEqual([])
+  })
+
+  it('reports loader เติมรายงานช่วง 1M', async () => {
+    const qc = new QueryClient()
+    await (
+      ReportsRoute.options.loader as (ctx: LoaderCtx) => Promise<unknown>
+    )({ context: { queryClient: qc } })
+
+    expect(getWorkHourReport).toHaveBeenCalledWith({ data: { range: '1M' } })
+    expect(qc.getQueryData(['pm', 'report', '1M'])).toBeDefined()
   })
 })

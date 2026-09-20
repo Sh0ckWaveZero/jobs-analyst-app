@@ -285,6 +285,43 @@ export async function listMyEntriesRecord(limit = 20) {
 
 export type MyEntryRow = Awaited<ReturnType<typeof listMyEntriesRecord>>[number]
 
+/** รายงานเวลาต่อคน×ต่อโปรเจกต์ (หน้า Reports) — scope ตามบทบาทเดียวกับ analysis */
+export async function getWorkHourReportRecord(
+  session: AuthSession,
+  input: AnalysisInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const days = RANGE_DAYS[input.range]
+  const fromDate = new Date()
+  fromDate.setDate(fromDate.getDate() - (days - 1))
+  fromDate.setHours(0, 0, 0, 0)
+
+  const scope = await analysisScope(session)
+  const filters = [gte(timeEntries.workDate, toWorkDate(fromDate))]
+
+  const rows = await db
+    .select({
+      userId: timeEntries.userId,
+      userName: user.name,
+      projectKey: projects.key,
+      projectName: projects.name,
+      minutes: sql<number>`sum(${timeEntries.durationMinutes})::int`,
+    })
+    .from(timeEntries)
+    .innerJoin(user, eq(user.id, timeEntries.userId))
+    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .where(scope ? and(scope, ...filters) : and(...filters))
+    .groupBy(timeEntries.userId, user.name, projects.key, projects.name)
+    .orderBy(user.name, desc(sql`sum(${timeEntries.durationMinutes})`))
+
+  const totalMinutes = rows.reduce((acc, r) => acc + r.minutes, 0)
+  return { range: input.range, rows, totalMinutes }
+}
+
+export type WorkHourReport = Awaited<ReturnType<typeof getWorkHourReportRecord>>
+
 export async function getWorkHourAnalysisRecord(
   session: AuthSession,
   input: AnalysisInput,
