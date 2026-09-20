@@ -8,10 +8,19 @@ import { hashPassword } from 'better-auth/crypto'
 
 import { getDb } from './client.server'
 import {
+  DEFAULT_ROLE_PERMISSIONS,
+  PERMISSION_CATALOG,
+  PERMISSION_KEYS,
+} from '../lib/rbac'
+import { Role, USER_ROLES } from '../lib/roles'
+import {
+  accessRoles,
   account,
   departments,
   issues,
+  permissions,
   projects,
+  rolePermissions,
   session,
   timeEntries,
   user,
@@ -53,6 +62,8 @@ async function main() {
   }
 
   // เคลียร์ของเดิมตามลำดับ FK (dev seed — ล้างแล้วใส่ใหม่ทั้งหมด)
+  await db.delete(rolePermissions)
+  await db.delete(permissions)
   await db.delete(timeEntries)
   await db.delete(issues)
   await db.delete(projects)
@@ -61,6 +72,7 @@ async function main() {
   await db.delete(verification)
   await db.delete(user)
   await db.delete(departments)
+  await db.delete(accessRoles)
 
   // hashPassword กับ insert แผนกอิสระต่อกัน — ทำขนาน
   const [password, deptRows] = await Promise.all([
@@ -73,33 +85,75 @@ async function main() {
   const deptId = (name: string) =>
     deptRows.find((d) => d.name === name)?.id ?? null
 
+  await db.insert(accessRoles).values([
+    {
+      key: Role.Admin,
+      label: 'Admin',
+      description: 'Full workspace access',
+      isSystem: true,
+    },
+    {
+      key: Role.Manager,
+      label: 'Manager',
+      description: 'Team operations',
+      isSystem: true,
+    },
+    {
+      key: Role.Member,
+      label: 'Member',
+      description: 'Individual contributor',
+      isSystem: true,
+    },
+  ])
+
+  await db.insert(permissions).values(
+    PERMISSION_CATALOG.map((permission) => ({
+      key: permission.key,
+      permissionGroup: permission.group,
+      label: permission.label,
+      description: permission.description,
+      isSystem: true,
+      protectedForAdmin: permission.protectedForAdmin ?? false,
+    })),
+  )
+
+  await db.insert(rolePermissions).values(
+    USER_ROLES.flatMap((role) =>
+      PERMISSION_KEYS.map((permission) => ({
+        role,
+        permission,
+        enabled: DEFAULT_ROLE_PERMISSIONS[role].includes(permission),
+      })),
+    ),
+  )
+
   const users = [
     {
       key: 'admin',
       email: 'admin@pm.local',
       name: 'Somchai Admin',
-      role: 'admin',
+      role: Role.Admin,
       department: 'Engineering',
     },
     {
       key: 'manager',
       email: 'manager@pm.local',
       name: 'Mana Manager',
-      role: 'manager',
+      role: Role.Manager,
       department: 'Engineering',
     },
     {
       key: 'member',
       email: 'member@pm.local',
       name: 'Nok Member',
-      role: 'member',
+      role: Role.Member,
       department: 'Marketing',
     },
     {
       key: 'member2',
       email: 'member2@pm.local',
       name: 'Oop Member',
-      role: 'member',
+      role: Role.Member,
       department: 'Marketing',
     },
   ] as const
