@@ -2,7 +2,7 @@ import * as React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
 import { ProjectsPage } from './projects-page'
 import { createProject, getProjects } from './projects.functions'
@@ -164,5 +164,17 @@ describe('ProjectsPage', () => {
     expect(await screen.findByText('สร้างโปรเจกต์ไม่สำเร็จ')).toBeInTheDocument()
     // แสดงทั้งใน toast description และ inline form error
     expect(await screen.findAllByText('Key ซ้ำ')).toHaveLength(2)
+  })
+
+  it('กด Escape / คลิกนอก drawer → drawer ยังเปิดอยู่ (ป้องกันข้อมูลหาย)', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: /New project/ }))
+    expect(await screen.findByText('สร้างโปรเจกต์ใหม่เพื่อเริ่มจัดการงาน')).toBeInTheDocument()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent.pointerDown(document.body)
+
+    expect(screen.getByText('สร้างโปรเจกต์ใหม่เพื่อเริ่มจัดการงาน')).toBeInTheDocument()
   })
 })

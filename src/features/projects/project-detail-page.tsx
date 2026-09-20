@@ -5,9 +5,11 @@ import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { queryKeys } from '@/lib/query-keys'
+import { Role } from '@/lib/roles'
 import {
   Form,
   FormControl,
@@ -55,8 +57,21 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { IssueStatus } from '@/db/schema'
 
 const STATUS_LABELS: Record<IssueStatus, string> = {
@@ -73,6 +88,228 @@ const PRIORITY_STYLES: Record<string, string> = {
   low: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
 }
 
+type IssueFilters = {
+  search: string
+  status: 'all' | IssueStatus
+  assignee: 'all' | 'mine' | 'none'
+}
+
+function applyIssueFilters(
+  issues: IssueRow[],
+  filters: IssueFilters,
+  userId: string | undefined,
+) {
+  const q = filters.search.trim().toLowerCase()
+  return issues.filter((issue) => {
+    if (filters.status !== 'all' && issue.status !== filters.status) return false
+    if (filters.assignee === 'mine' && issue.assigneeId !== userId) return false
+    if (filters.assignee === 'none' && issue.assigneeId) return false
+    if (
+      q &&
+      !issue.title.toLowerCase().includes(q) &&
+      !issue.key.toLowerCase().includes(q)
+    )
+      return false
+    return true
+  })
+}
+
+function IssuesFilterBar({
+  filters,
+  total,
+  shown,
+  onChange,
+  onClear,
+}: {
+  filters: IssueFilters
+  total: number
+  shown: number
+  onChange: (next: IssueFilters) => void
+  onClear: () => void
+}) {
+  const filtersActive =
+    filters.search.trim() !== '' ||
+    filters.status !== 'all' ||
+    filters.assignee !== 'all'
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Input
+        value={filters.search}
+        onChange={(e) => onChange({ ...filters, search: e.target.value })}
+        placeholder="ค้นหา issue…"
+        className="h-9 w-56"
+      />
+      <Select
+        value={filters.status}
+        onValueChange={(v) =>
+          onChange({ ...filters, status: v as 'all' | IssueStatus })
+        }
+      >
+        <SelectTrigger aria-label="กรองสถานะ" className="h-9 w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">ทุกสถานะ</SelectItem>
+          {(Object.keys(STATUS_LABELS) as IssueStatus[]).map((s) => (
+            <SelectItem key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={filters.assignee}
+        onValueChange={(v) =>
+          onChange({ ...filters, assignee: v as 'all' | 'mine' | 'none' })
+        }
+      >
+        <SelectTrigger aria-label="กรองผู้รับผิดชอบ" className="h-9 w-48">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">ผู้รับผิดชอบ: ทั้งหมด</SelectItem>
+          <SelectItem value="mine">มอบหมายให้ฉัน</SelectItem>
+          <SelectItem value="none">ไม่มีผู้รับผิดชอบ</SelectItem>
+        </SelectContent>
+      </Select>
+      {filtersActive && (
+        <Button variant="ghost" size="sm" onClick={onClear}>
+          ล้างตัวกรอง
+        </Button>
+      )}
+      <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+        {shown} / {total} issues
+      </span>
+    </div>
+  )
+}
+
+function IssuesTable({
+  isLoading,
+  issues,
+  filteredIssues,
+  canManage,
+  isArchived,
+  sessionUserId,
+  pid,
+}: {
+  isLoading: boolean
+  issues: IssueRow[]
+  filteredIssues: IssueRow[]
+  canManage: boolean
+  isArchived: boolean
+  sessionUserId: string | undefined
+  pid: number
+}) {
+  return (
+    <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-xs text-muted-foreground">
+            <th className="px-4 py-3 font-medium">Issue</th>
+            <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">Priority</th>
+            <th className="px-4 py-3 font-medium">Assignee</th>
+            <th className="px-4 py-3 font-medium">Labels</th>
+            <th className="px-4 py-3 font-medium">Due date</th>
+            <th className="px-4 py-3 font-medium">Logged</th>
+            <th className="px-4 py-3" />
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {isLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <tr key={i}>
+                  <td colSpan={8} className="px-4 py-3">
+                    <Skeleton className="h-5 w-full" />
+                  </td>
+                </tr>
+              ))
+            : filteredIssues.map((issue) => (
+                <tr key={issue.id} className="hover:bg-accent/30">
+                  <td className="px-4 py-3">
+                    <span className="mr-2 font-mono text-xs text-muted-foreground">
+                      {issue.key}
+                    </span>
+                    <span className="font-medium">{issue.title}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusSelect
+                      issueId={issue.id}
+                      value={issue.status}
+                      disabled={
+                        isArchived ||
+                        (!canManage &&
+                          sessionUserId !== issue.reporterId &&
+                          sessionUserId !== issue.assigneeId)
+                      }
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[issue.priority]}`}
+                    >
+                      {issue.priority}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {issue.assigneeName ?? 'No owner'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {issue.labels.map((l) => (
+                        <Badge key={l} variant="secondary">
+                          {l}
+                        </Badge>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                    {issue.dueDate ?? '—'}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                    <IssueWorklogDrawer
+                      issue={issue}
+                      totalMinutes={issue.totalMinutes}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {!isArchived &&
+                        (canManage ||
+                          sessionUserId === issue.reporterId ||
+                          sessionUserId === issue.assigneeId) && (
+                          <>
+                            <LogWorkDrawer projectId={pid} issue={issue} />
+                            <EditIssueDrawer issue={issue} />
+                          </>
+                        )}
+                      {!isArchived && canManage && (
+                        <DeleteIssueButton issue={issue} />
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          {!isLoading && filteredIssues.length === 0 && (
+            <tr>
+              <td
+                colSpan={8}
+                className="px-4 py-10 text-center text-muted-foreground"
+              >
+                {issues.length
+                  ? 'ไม่มี issue ที่ตรงกับตัวกรอง — ลองล้างตัวกรองดู'
+                  : 'ยังไม่มี issue ในโปรเจกต์นี้'}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const pid = Number(projectId)
   const { data: session } = authClient.useSession()
@@ -81,12 +318,12 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const listIssuesFn = useServerFn(listIssues)
 
   const qProject = useQuery({
-    queryKey: ['pm', 'projects'],
+    queryKey: queryKeys.projects,
     queryFn: () => projects(),
   })
   const qArchived = useQuery({
     // key เดียวกับ sidebar — แชร์ cache กัน
-    queryKey: ['pm', 'projects-archived'],
+    queryKey: queryKeys.projectsArchived,
     queryFn: () => archivedFn(),
   })
   // โปรเจกต์ที่ archive แล้วยังเปิดดูได้จากหน้านี้ (sidebar ชี้มาที่นี่)
@@ -95,14 +332,30 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     qArchived.data?.find((p) => p.id === pid)
 
   const qIssues = useQuery({
-    queryKey: ['pm', 'project-issues', pid],
+    queryKey: queryKeys.projectIssues(pid),
     queryFn: () => listIssuesFn({ data: { projectId: pid, limit: 100 } }),
   })
 
   const canManage =
-    session?.user.role === 'admin' ||
-    (session?.user.role === 'manager' && project?.ownerId === session.user.id)
+    session?.user.role === Role.Admin ||
+    (session?.user.role === Role.Manager && project?.ownerId === session.user.id)
   const isArchived = project?.status === 'archived'
+
+  // ตัวกรอง issue ในตาราง — กรองฝั่ง client จากข้อมูลที่โหลดแล้วทั้งหมด
+  const [filters, setFilters] = useState<IssueFilters>({
+    search: '',
+    status: 'all',
+    assignee: 'all',
+  })
+  const filteredIssues = applyIssueFilters(
+    qIssues.data ?? [],
+    filters,
+    session?.user.id,
+  )
+
+  function clearFilters() {
+    setFilters({ search: '', status: 'all', assignee: 'all' })
+  }
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -115,7 +368,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         </Link>
         <header className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 font-mono text-sm font-bold text-primary">
+            <div
+              className="flex size-10 items-center justify-center rounded-lg bg-primary/10 font-mono text-sm font-bold text-primary"
+              style={{ viewTransitionName: `project-key-${pid}` }}
+            >
               {project?.key ?? '…'}
             </div>
             <div>
@@ -128,7 +384,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
               </p>
             </div>
           </div>
-          {!isArchived && (canManage || session?.user.role === 'member') && (
+          {!isArchived && (canManage || session?.user.role === Role.Member) && (
             <NewIssueForm projectId={pid} />
           )}
         </header>
@@ -140,100 +396,23 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
         )}
       </div>
 
-      <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-xs text-muted-foreground">
-              <th className="px-4 py-3 font-medium">Issue</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Priority</th>
-              <th className="px-4 py-3 font-medium">Assignee</th>
-              <th className="px-4 py-3 font-medium">Labels</th>
-              <th className="px-4 py-3 font-medium">Due date</th>
-              <th className="px-4 py-3 font-medium">Logged</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {(qIssues.data ?? []).map((issue) => (
-              <tr key={issue.id} className="hover:bg-accent/30">
-                <td className="px-4 py-3">
-                  <span className="mr-2 font-mono text-xs text-muted-foreground">
-                    {issue.key}
-                  </span>
-                  <span className="font-medium">{issue.title}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <StatusSelect
-                    issueId={issue.id}
-                    value={issue.status}
-                    disabled={
-                      isArchived ||
-                      (!canManage &&
-                        session?.user.id !== issue.reporterId &&
-                        session?.user.id !== issue.assigneeId)
-                    }
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[issue.priority]}`}
-                  >
-                    {issue.priority}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {issue.assigneeName ?? 'No owner'}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {issue.labels.map((l) => (
-                      <Badge key={l} variant="secondary">
-                        {l}
-                      </Badge>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                  {issue.dueDate ?? '—'}
-                </td>
-                <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                  <IssueWorklogDrawer
-                    issue={issue}
-                    totalMinutes={issue.totalMinutes}
-                  />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {!isArchived &&
-                      (canManage ||
-                        session?.user.id === issue.reporterId ||
-                        session?.user.id === issue.assigneeId) && (
-                        <>
-                          <LogWorkDrawer projectId={pid} issue={issue} />
-                          <EditIssueDrawer issue={issue} />
-                        </>
-                      )}
-                    {!isArchived && canManage && (
-                      <DeleteIssueButton issueId={issue.id} />
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {qIssues.data?.length === 0 && (
-              <tr>
-                <td
-                  colSpan={8}
-                  className="px-4 py-10 text-center text-muted-foreground"
-                >
-                  ยังไม่มี issue ในโปรเจกต์นี้
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+      <IssuesFilterBar
+        filters={filters}
+        total={qIssues.data?.length ?? 0}
+        shown={filteredIssues.length}
+        onChange={setFilters}
+        onClear={clearFilters}
+      />
+
+      <IssuesTable
+        isLoading={qIssues.isLoading}
+        issues={qIssues.data ?? []}
+        filteredIssues={filteredIssues}
+        canManage={canManage}
+        isArchived={isArchived}
+        sessionUserId={session?.user.id}
+        pid={pid}
+      />
     </div>
   )
 }
@@ -253,7 +432,7 @@ function StatusSelect({
     mutationFn: (status: IssueStatus) =>
       update({ data: { id: issueId, status } }),
     onSuccess: (_data, status) => {
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success(`อัปเดตสถานะเป็น ${STATUS_LABELS[status]} แล้ว`)
     },
     onError: (err) =>
@@ -282,13 +461,13 @@ function StatusSelect({
   )
 }
 
-function DeleteIssueButton({ issueId }: { issueId: number }) {
+function DeleteIssueButton({ issue }: { issue: IssueRow }) {
   const qc = useQueryClient()
   const del = useServerFn(deleteIssue)
   const mut = useMutation({
-    mutationFn: () => del({ data: { id: issueId } }),
+    mutationFn: () => del({ data: { id: issue.id } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('ลบ issue แล้ว')
     },
     onError: (err) =>
@@ -298,14 +477,40 @@ function DeleteIssueButton({ issueId }: { issueId: number }) {
   })
 
   return (
-    <button
-      type="button"
-      onClick={() => mut.mutate()}
-      disabled={mut.isPending}
-      className="text-xs text-muted-foreground hover:text-destructive"
-    >
-      delete
-    </button>
+    <AlertDialog>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-destructive"
+              aria-label="Delete issue"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </AlertDialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Delete issue</TooltipContent>
+      </Tooltip>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>ลบ issue นี้?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {issue.key} · {issue.title} จะถูกลบถาวร การกระทำนี้ย้อนกลับไม่ได้
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-white hover:bg-destructive/90"
+            onClick={() => mut.mutate()}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -326,7 +531,7 @@ function NewIssueForm({ projectId }: { projectId: number }) {
   const [open, setOpen] = useState(false)
 
   const qAssignable = useQuery({
-    queryKey: ['pm', 'assignable'],
+    queryKey: queryKeys.assignableUsers,
     queryFn: () => assignable(),
   })
 
@@ -364,7 +569,7 @@ function NewIssueForm({ projectId }: { projectId: number }) {
     onSuccess: () => {
       setOpen(false)
       form.reset()
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('สร้าง issue แล้ว')
     },
     onError: (err) => {
@@ -389,7 +594,12 @@ function NewIssueForm({ projectId }: { projectId: number }) {
           <Plus className="size-4" /> New issue
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <SheetHeader>
           <SheetTitle>New issue</SheetTitle>
           <SheetDescription>สร้าง issue ใหม่ในโปรเจกต์นี้</SheetDescription>
@@ -469,7 +679,7 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
   const [open, setOpen] = useState(false)
 
   const qAssignable = useQuery({
-    queryKey: ['pm', 'assignable'],
+    queryKey: queryKeys.assignableUsers,
     queryFn: () => assignable(),
     enabled: open,
   })
@@ -509,7 +719,7 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
       }),
     onSuccess: () => {
       setOpen(false)
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('บันทึกการแก้ไข issue แล้ว')
     },
     onError: (err) => {
@@ -538,12 +748,27 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-          Edit
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Edit issue"
+            >
+              <Pencil className="size-4" />
+            </Button>
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Edit issue</TooltipContent>
+      </Tooltip>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <SheetHeader>
           <SheetTitle>Edit issue</SheetTitle>
           <SheetDescription>

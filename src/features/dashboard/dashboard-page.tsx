@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { queryKeys } from '@/lib/query-keys'
 import { authClient } from '@/features/auth/auth-client'
 import {
   getDashboardCounts,
@@ -115,11 +117,13 @@ export function DashboardPage() {
 function Card({
   title,
   note,
+  action,
   children,
   className,
 }: {
   title: string
   note?: string
+  action?: React.ReactNode
   children: React.ReactNode
   className?: string
 }) {
@@ -129,7 +133,10 @@ function Card({
     >
       <div className="flex items-baseline justify-between border-b px-5 py-4">
         <h2 className="text-sm font-semibold">{title}</h2>
-        {note && <p className="text-xs text-muted-foreground">{note}</p>}
+        <div className="flex items-baseline gap-3">
+          {note && <p className="text-xs text-muted-foreground">{note}</p>}
+          {action}
+        </div>
       </div>
       <div className="p-5">{children}</div>
     </section>
@@ -140,11 +147,11 @@ function StatCards() {
   const counts = useServerFn(getDashboardCounts)
   const week = useServerFn(getMyWeekMinutes)
   const qCounts = useQuery({
-    queryKey: ['pm', 'counts'],
+    queryKey: queryKeys.dashboardCounts,
     queryFn: () => counts(),
   })
   const qWeek = useQuery({
-    queryKey: ['pm', 'week'],
+    queryKey: queryKeys.myWeekMinutes,
     queryFn: () => week(),
   })
 
@@ -184,7 +191,7 @@ function StatCards() {
 
 function IssueStatusCard() {
   const counts = useServerFn(getDashboardCounts)
-  const q = useQuery({ queryKey: ['pm', 'counts'], queryFn: () => counts() })
+  const q = useQuery({ queryKey: queryKeys.dashboardCounts, queryFn: () => counts() })
   const statusCounts = q.data?.statusCounts
   const max = Math.max(1, ...Object.values(statusCounts ?? { done: 1 }))
 
@@ -226,7 +233,7 @@ function WorkHourCard() {
   const [range, setRange] = useState<AnalysisRange>('2W')
   const analysis = useServerFn(getWorkHourAnalysis)
   const q = useQuery({
-    queryKey: ['pm', 'analysis', range],
+    queryKey: queryKeys.workHourAnalysis(range),
     queryFn: () => analysis({ data: { range } }),
   })
 
@@ -299,11 +306,11 @@ function TimeTrackerCard() {
   const listIssuesFn = useServerFn(listIssues)
 
   const qRunning = useQuery({
-    queryKey: ['pm', 'running'],
+    queryKey: queryKeys.runningEntry,
     queryFn: () => running(),
   })
   const qProjects = useQuery({
-    queryKey: ['pm', 'projects'],
+    queryKey: queryKeys.projects,
     queryFn: () => projects(),
   })
 
@@ -314,7 +321,7 @@ function TimeTrackerCard() {
   const projectId = form.watch('projectId')
 
   const qIssues = useQuery({
-    queryKey: ['pm', 'project-issues', projectId],
+    queryKey: queryKeys.projectIssues(projectId),
     queryFn: () =>
       listIssuesFn({ data: { projectId: Number(projectId), limit: 50 } }),
     enabled: projectId !== '',
@@ -348,7 +355,7 @@ function TimeTrackerCard() {
       }),
     onSuccess: (_data, variables) => {
       form.reset({ projectId: variables.projectId, issueId: '', note: '' })
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('เริ่มจับเวลาแล้ว')
     },
     onError: (err) =>
@@ -363,7 +370,7 @@ function TimeTrackerCard() {
       return stop({ data: { entryId: id } })
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('หยุดจับเวลาและบันทึกรายการแล้ว')
     },
     onError: (err) =>
@@ -509,7 +516,7 @@ function MyIssuesCard() {
   const listIssuesFn = useServerFn(listIssues)
   const { data: session } = authClient.useSession()
   const q = useQuery({
-    queryKey: ['pm', 'issues', 'mine'],
+    queryKey: queryKeys.myIssues,
     queryFn: () =>
       listIssuesFn({ data: { assigneeId: session!.user.id, limit: 8 } }),
     enabled: !!session,
@@ -517,29 +524,42 @@ function MyIssuesCard() {
 
   return (
     <Card title="My Issues" note="assigned to me" className="lg:col-span-3">
-      <ul className="flex flex-col divide-y">
-        {(q.data ?? []).map((issue) => (
-          <li key={issue.id} className="flex items-center gap-3 py-2.5 text-sm">
-            <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">
-              {issue.key}
-            </span>
-            <span className="min-w-0 flex-1 truncate">{issue.title}</span>
-            <Badge variant="outline" className="shrink-0">
-              {STATUS_LABELS[issue.status]}
-            </Badge>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[issue.priority]}`}
-            >
-              {issue.priority}
-            </span>
-          </li>
-        ))}
-        {q.data?.length === 0 && (
-          <li className="py-6 text-center text-sm text-muted-foreground">
-            ไม่มี issue ที่มอบหมายให้คุณ
-          </li>
-        )}
-      </ul>
+      {q.isLoading ? (
+        <div className="flex flex-col divide-y">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 py-2.5">
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-4 min-w-0 flex-1" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-5 w-12 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ul className="flex flex-col divide-y">
+          {(q.data ?? []).map((issue) => (
+            <li key={issue.id} className="flex items-center gap-3 py-2.5 text-sm">
+              <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">
+                {issue.key}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{issue.title}</span>
+              <Badge variant="outline" className="shrink-0">
+                {STATUS_LABELS[issue.status]}
+              </Badge>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[issue.priority]}`}
+              >
+                {issue.priority}
+              </span>
+            </li>
+          ))}
+          {q.data?.length === 0 && (
+            <li className="py-6 text-center text-sm text-muted-foreground">
+              ไม่มี issue ที่มอบหมายให้คุณ
+            </li>
+          )}
+        </ul>
+      )}
     </Card>
   )
 }
@@ -618,12 +638,23 @@ function MeetingsCard() {
 function RecentEntriesCard() {
   const entries = useServerFn(listMyEntries)
   const q = useQuery({
-    queryKey: ['pm', 'my-entries'],
-    queryFn: () => entries({ data: {} }),
+    queryKey: queryKeys.myEntries,
+    queryFn: () => entries({ data: { limit: 10 } }),
   })
 
   return (
-    <Card title="Recent Time Entries" note="latest 20 of mine">
+    <Card
+      title="Recent Time Entries"
+      note="latest 10 of mine"
+      action={
+        <Link
+          to="/time-entries"
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          View all
+        </Link>
+      }
+    >
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -635,7 +666,15 @@ function RecentEntriesCard() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {(q.data ?? []).map((e) => (
+            {q.isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={4} className="py-3">
+                      <Skeleton className="h-4 w-full" />
+                    </td>
+                  </tr>
+                ))
+              : (q.data ?? []).map((e) => (
               <tr key={e.id}>
                 <td className="py-2.5 tabular-nums">{e.workDate}</td>
                 <td className="py-2.5">

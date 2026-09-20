@@ -3,8 +3,10 @@ import { and, eq, sql } from 'drizzle-orm'
 import { getDb } from '@/db/client.server'
 import { issues, projects, timeEntries, user } from '@/db/schema'
 import type { AuthSession } from '@/features/auth/auth.server'
-import { requireRole, requireSession } from '@/features/auth/auth.server'
+import { Role } from '@/lib/roles'
+import { requirePermission, requireSession } from '@/features/auth/auth.server'
 import type { CreateProjectInput, UpdateProjectInput } from './projects.schema'
+import { Permissions } from '@/lib/rbac'
 
 /**
  * โปรเจกต์อ่านได้ทุกบทบาทที่ล็อกอิน (member อ่านอย่างเดียว)
@@ -14,8 +16,8 @@ async function assertProjectManageAccess(
   session: AuthSession,
   projectId: number,
 ) {
-  requireRole(session, ['admin', 'manager'])
-  if (session.user.role === 'manager') {
+  await requirePermission(session, Permissions.ProjectsManage)
+  if (session.user.role === Role.Manager) {
     const db = getDb()!
     const [row] = await db
       .select({ ownerId: projects.ownerId })
@@ -39,9 +41,7 @@ export async function assertProjectActive(projectId: number) {
     .limit(1)
   if (!row) throw new Error('Project not found')
   if (row.status === 'archived') {
-    throw new Error(
-      'Project is archived — unarchive it before adding new work',
-    )
+    throw new Error('Project is archived — unarchive it before adding new work')
   }
 }
 
@@ -118,7 +118,7 @@ export async function getArchivedProjectsRecord() {
 
 export async function createProjectRecord(input: CreateProjectInput) {
   const session = await requireSession()
-  requireRole(session, ['admin', 'manager'])
+  await requirePermission(session, Permissions.ProjectsManage)
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
 

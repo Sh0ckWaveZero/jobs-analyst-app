@@ -325,3 +325,101 @@ describe('DashboardPage — Time Tracker', () => {
     expect(await screen.findByText('45 mins')).toBeInTheDocument()
   })
 })
+
+describe('DashboardPage — เติม branch ครบ', () => {
+  it('ไม่มี session → header ไม่มีชื่อ + ไม่ prefetch my-issues', async () => {
+    state.session = null as never
+    renderPage()
+    expect(
+      await screen.findByText('ภาพรวมงานและชั่วโมงทำงาน'),
+    ).toBeInTheDocument()
+    expect(listIssues).not.toHaveBeenCalled()
+    // restore กัน session null ไหลไป test อื่น
+    state.session = {
+      user: { id: 'u8', name: 'Nok Member', role: 'member' },
+    }
+  })
+
+  it('statusCounts ขาดสถานะบางตัว → แสดง 0', async () => {
+    vi.mocked(getDashboardCounts).mockResolvedValue({
+      created: 1,
+      assigned: 1,
+      statusCounts: { backlog: 1 },
+    })
+    renderPage()
+    expect(await screen.findByText('Issues created')).toBeInTheDocument()
+    expect((await screen.findAllByText('0')).length).toBe(4)
+  })
+
+  it('running timer ไม่มีชื่อ issue/note → แสดง Working…', async () => {
+    state.running = {
+      id: 9,
+      projectKey: 'WEB',
+      issueNumber: null,
+      issueTitle: null,
+      note: null,
+      startedAt: new Date().toISOString(),
+    }
+    renderPage()
+    expect(await screen.findByText(/WEB\s*Working…/)).toBeInTheDocument()
+  })
+
+  it('startTimer fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(startTimer).mockRejectedValue('boom')
+    renderPage()
+    await screen.findByText('Time Tracker')
+
+    await user.click(screen.getByRole('combobox', { name: 'Project' }))
+    await user.click(await screen.findByRole('option', { name: /Website Revamp/ }))
+    await user.click(screen.getByRole('button', { name: /Start/ }))
+
+    expect(
+      (await screen.findAllByText('เริ่มจับเวลาไม่สำเร็จ')).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('stopTimer fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(stopTimer).mockRejectedValue('boom')
+    state.running = {
+      id: 9,
+      projectKey: 'WEB',
+      issueNumber: 102,
+      issueTitle: 'Finalize design tokens',
+      note: null,
+      startedAt: new Date().toISOString(),
+    }
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /Stop/ }))
+    expect(
+      (await screen.findAllByText('หยุดจับเวลาไม่สำเร็จ')).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('my issues ว่าง → empty state', async () => {
+    vi.mocked(listIssues).mockResolvedValue([] as never)
+    renderPage()
+    expect(
+      await screen.findByText('ไม่มี issue ที่มอบหมายให้คุณ'),
+    ).toBeInTheDocument()
+  })
+
+  it('recent entries กำลังโหลด → skeleton แถว', async () => {
+    vi.mocked(listMyEntries).mockReturnValue(new Promise(() => {}) as never)
+    renderPage()
+    expect(await screen.findByText('Recent Time Entries')).toBeInTheDocument()
+    expect(document.querySelectorAll('tbody tr').length).toBeGreaterThan(0)
+  })
+
+  it('Today: แท็บ focus → placeholder', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Today')
+    await user.click(screen.getByRole('button', { name: 'focus' }))
+    expect(
+      await screen.findByText(/ตั้ง focus time เพื่อบล็อกช่วงทำงานสมาธิ/),
+    ).toBeInTheDocument()
+  })
+})

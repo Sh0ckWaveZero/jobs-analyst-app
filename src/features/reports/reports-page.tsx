@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Download, FileChartColumn } from 'lucide-react'
 
+import { queryKeys } from '@/lib/query-keys'
 import { getWorkHourReport } from '@/features/time-entries/time-entries.functions'
 import type { AnalysisRange } from '@/features/time-entries/time-entries.schema'
 import type { WorkHourReport } from '@/features/time-entries/time-entries.server'
@@ -49,7 +50,7 @@ export function ReportsPage() {
   const [range, setRange] = useState<AnalysisRange>('1M')
   const reportFn = useServerFn(getWorkHourReport)
   const q = useQuery({
-    queryKey: ['pm', 'report', range],
+    queryKey: queryKeys.report(range),
     queryFn: () => reportFn({ data: { range } }),
   })
 

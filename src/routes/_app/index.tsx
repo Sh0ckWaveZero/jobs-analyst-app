@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { DashboardPage } from '@/features/dashboard/dashboard-page'
+import { RouteSkeleton } from '@/components/layout/route-skeleton'
+import { queryKeys } from '@/lib/query-keys'
 import { getSession } from '@/features/auth/auth.functions'
 import {
   getDashboardCounts,
@@ -21,34 +23,41 @@ export const Route = createFileRoute('/_app/')({
     const session = await getSession()
 
     await Promise.all([
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'counts'],
+      queryClient.query({
+        staleTime: 'static',
+        queryKey: queryKeys.dashboardCounts,
         queryFn: () => getDashboardCounts(),
       }),
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'week'],
+      queryClient.query({
+        staleTime: 'static',
+        queryKey: queryKeys.myWeekMinutes,
         queryFn: () => getMyWeekMinutes(),
       }),
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'analysis', '2W'],
+      queryClient.query({
+        staleTime: 'static',
+        queryKey: queryKeys.workHourAnalysis('2W'),
         queryFn: () => getWorkHourAnalysis({ data: { range: '2W' } }),
       }),
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'running'],
+      queryClient.query({
+        staleTime: 'static',
+        queryKey: queryKeys.runningEntry,
         queryFn: () => getRunningEntry(),
       }),
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'projects'],
+      queryClient.query({
+        staleTime: 'static',
+        queryKey: queryKeys.projects,
         queryFn: () => getProjects(),
       }),
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'my-entries'],
-        queryFn: () => listMyEntries({ data: {} }),
+      queryClient.query({
+        staleTime: 'static',
+        queryKey: queryKeys.myEntries,
+        queryFn: () => listMyEntries({ data: { limit: 10 } }),
       }),
       ...(session
         ? [
-            queryClient.ensureQueryData({
-              queryKey: ['pm', 'issues', 'mine'],
+            queryClient.query({
+              staleTime: 'static',
+              queryKey: queryKeys.myIssues,
               queryFn: () =>
                 listIssues({
                   data: { assigneeId: session.user.id, limit: 8 },
@@ -58,5 +67,6 @@ export const Route = createFileRoute('/_app/')({
         : []),
     ])
   },
+  pendingComponent: RouteSkeleton,
   component: DashboardPage,
 })

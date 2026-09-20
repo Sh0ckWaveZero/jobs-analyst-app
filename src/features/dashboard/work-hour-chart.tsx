@@ -35,7 +35,13 @@ export function WorkHourChart({
           unit="h"
         />
         <ChartTooltip formatter={(v) => [`${v}h`, 'Work']} />
-        <Bar dataKey="hours" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+        <Bar
+          dataKey="hours"
+          fill="hsl(var(--primary))"
+          radius={[3, 3, 0, 0]}
+          animationDuration={300}
+          animationEasing="ease-out"
+        />
       </BarChart>
     </ResponsiveContainer>
   )
