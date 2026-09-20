@@ -29,6 +29,22 @@ async function assertProjectManageAccess(
   }
 }
 
+/** โปรเจกต์ archived แล้วถือว่าปิดงาน ห้ามสร้าง issue/log เวลาใหม่ ต้อง unarchive ก่อน */
+export async function assertProjectActive(projectId: number) {
+  const db = getDb()!
+  const [row] = await db
+    .select({ status: projects.status })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1)
+  if (!row) throw new Error('Project not found')
+  if (row.status === 'archived') {
+    throw new Error(
+      'Project is archived — unarchive it before adding new work',
+    )
+  }
+}
+
 export async function getProjectsRecord() {
   const session = await requireSession()
   const db = getDb()
@@ -67,7 +83,7 @@ export type ProjectRow = Awaited<
   ReturnType<typeof getProjectsRecord>
 >['projects'][number]
 
-/** โปรเจกต์ที่ archive แล้ว (ไว้โชว์ใน sidebar กลุ่ม Archived) */
+/** โปรเจกต์ที่ archive แล้ว (ไว้โชว์ใน sidebar กลุ่ม Archived และเปิดดูรายละเอียดได้) */
 export async function getArchivedProjectsRecord() {
   await requireSession()
   const db = getDb()
@@ -78,8 +94,24 @@ export async function getArchivedProjectsRecord() {
       id: projects.id,
       key: projects.key,
       name: projects.name,
+      description: projects.description,
+      status: projects.status,
+      ownerId: projects.ownerId,
+      ownerName: user.name,
+      createdAt: projects.createdAt,
+      openIssues: sql<number>`(
+        select count(*)::int from ${issues}
+        where ${issues.projectId} = ${projects.id}
+          and ${issues.status} <> 'done'
+      )`,
+      totalMinutes: sql<number>`(
+        select coalesce(sum(${timeEntries.durationMinutes}), 0)::int
+        from ${timeEntries}
+        where ${timeEntries.projectId} = ${projects.id}
+      )`,
     })
     .from(projects)
+    .leftJoin(user, eq(user.id, projects.ownerId))
     .where(eq(projects.status, 'archived'))
     .orderBy(projects.key)
 }

@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-// จำกัด 24 ชั่วโมงต่อรายการ — ตรงกับ MAX_LOG_MINUTES ใน src/lib/duration.ts
-const MAX_MINUTES = 1440
+import { MAX_LOG_MINUTES } from '@/lib/duration'
 
 export const analysisRangeSchema = z.enum(['5D', '2W', '1M', '6M', '1Y'])
 export type AnalysisRange = z.infer<typeof analysisRangeSchema>
 
 export const workDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+export const workTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 
 export const startTimerInputSchema = z.object({
   projectId: z.number().int().positive(),
@@ -22,8 +22,11 @@ export const addManualEntryInputSchema = z.object({
   projectId: z.number().int().positive(),
   issueId: z.number().int().positive().optional(),
   workDate: workDateSchema,
-  minutes: z.number().int().min(1).max(MAX_MINUTES),
+  startTime: workTimeSchema.optional(),
+  minutes: z.number().int().min(1).max(MAX_LOG_MINUTES),
   note: z.string().max(300).optional(),
+  /** เวลาคงเหลือใหม่ของ issue หลัง log นี้ — ไม่ส่งมา = ไม่แตะ remaining estimate */
+  remainingEstimateMinutes: z.number().int().min(0).max(MAX_LOG_MINUTES).optional(),
 })
 
 export const deleteEntryInputSchema = z.object({
@@ -32,7 +35,7 @@ export const deleteEntryInputSchema = z.object({
 
 export const updateEntryInputSchema = z.object({
   id: z.number().int().positive(),
-  minutes: z.number().int().min(1).max(MAX_MINUTES).optional(),
+  minutes: z.number().int().min(1).max(MAX_LOG_MINUTES).optional(),
   workDate: workDateSchema.optional(),
   note: z.string().max(300).nullable().optional(),
 })

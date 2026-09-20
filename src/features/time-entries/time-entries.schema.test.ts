@@ -41,15 +41,17 @@ describe('addManualEntryInputSchema', () => {
     expect(addManualEntryInputSchema.parse(valid)).toEqual(valid)
   })
 
-  it('minutes ต้องอยู่ระหว่าง 1–1440 นาที (24 ชม.)', () => {
+  it('minutes ต้องอยู่ระหว่าง 1–86400 นาที (60 วัน)', () => {
     expect(
       addManualEntryInputSchema.safeParse({ ...valid, minutes: 0 }).success,
     ).toBe(false)
     expect(
-      addManualEntryInputSchema.safeParse({ ...valid, minutes: 1441 }).success,
+      addManualEntryInputSchema.safeParse({ ...valid, minutes: 86401 })
+        .success,
     ).toBe(false)
     expect(
-      addManualEntryInputSchema.safeParse({ ...valid, minutes: 1440 }).success,
+      addManualEntryInputSchema.safeParse({ ...valid, minutes: 86400 })
+        .success,
     ).toBe(true)
   })
 
@@ -84,9 +86,9 @@ describe('updateEntryInputSchema', () => {
     )
   })
 
-  it('minutes ต้องไม่เกิน 1440 และ id ต้องบวก', () => {
+  it('minutes ต้องไม่เกิน 86400 และ id ต้องบวก', () => {
     expect(
-      updateEntryInputSchema.safeParse({ id: 5, minutes: 1441 }).success,
+      updateEntryInputSchema.safeParse({ id: 5, minutes: 86401 }).success,
     ).toBe(false)
     expect(updateEntryInputSchema.safeParse({ id: 0 }).success).toBe(false)
   })

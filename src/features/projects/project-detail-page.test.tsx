@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor, within } from '@testing-library/react'
 
 import { ProjectDetailPage } from './project-detail-page'
-import { getProjects } from './projects.functions'
+import { getArchivedProjects, getProjects } from './projects.functions'
 import {
   addManualEntry,
   listIssueEntries,
@@ -36,6 +36,7 @@ vi.mock('@/features/auth/auth-client', () => ({
 }))
 vi.mock('./projects.functions', () => ({
   getProjects: vi.fn(),
+  getArchivedProjects: vi.fn(),
 }))
 vi.mock('@/features/issues/issues.functions', () => ({
   listIssues: vi.fn(),
@@ -70,6 +71,18 @@ const projectsFixture = {
   ],
 }
 
+const archivedProjectFixture = {
+  id: 16,
+  key: 'WEB',
+  name: 'Website Revamp',
+  description: 'เว็บใหม่',
+  status: 'archived',
+  ownerId: 'u2',
+  ownerName: 'Mana Manager',
+  openIssues: 2,
+  totalMinutes: 4245,
+}
+
 const issuesFixture = [
   {
     id: 102,
@@ -102,6 +115,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.mocked(getProjects).mockResolvedValue(projectsFixture as never)
+  vi.mocked(getArchivedProjects).mockResolvedValue([] as never)
   vi.mocked(listIssues).mockResolvedValue(issuesFixture as never)
   vi.mocked(createIssue).mockReset()
   vi.mocked(updateIssue).mockReset()
@@ -183,16 +197,17 @@ describe('ProjectDetailPage', () => {
 
     await user.click(screen.getByRole('button', { name: /Log/ }))
     expect(
-      await screen.findByRole('heading', { name: 'Log work' }),
+      await screen.findByRole('heading', { name: 'Time tracking' }),
     ).toBeInTheDocument()
     expect(
       screen.getByText('WEB-102 · Finalize design system tokens'),
     ).toBeInTheDocument()
 
     await user.type(screen.getByLabelText('Time spent'), '1h 45m')
-    expect(await screen.findByText('= 1h 45m (105 นาที)')).toBeInTheDocument()
+    // issue นี้มี totalMinutes เดิม 100 นาทีอยู่แล้ว (จาก fixture) + 105 ที่เพิ่งพิมพ์ = 205 = 3h 25m
+    expect(await screen.findByText('3h 25m logged')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Log work' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
       expect(addManualEntry).toHaveBeenCalledWith({
@@ -380,6 +395,28 @@ describe('ProjectDetailPage', () => {
       data: expect.objectContaining({ labels: [] }),
     })
     expect(await screen.findByText('แก้ไข issue ไม่สำเร็จ')).toBeInTheDocument()
+  })
+
+  it('โปรเจกต์ archived → เห็น badge, ไม่มีปุ่มแก้ไข/สร้าง, สถานะแก้ไม่ได้', async () => {
+    vi.mocked(getProjects).mockResolvedValue({ projects: [] } as never)
+    vi.mocked(getArchivedProjects).mockResolvedValue([
+      archivedProjectFixture,
+    ] as never)
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    expect(screen.getByText('Archived')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /New issue/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByText('delete')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Log/ }),
+    ).not.toBeInTheDocument()
+
+    const row = screen.getByRole('row', { name: /WEB-102/ })
+    expect(within(row).getByRole('combobox')).toBeDisabled()
   })
 
   it('กด Cancel ใน drawer (สร้าง/แก้ไข) → ปิดโดยไม่เรียก server fn', async () => {

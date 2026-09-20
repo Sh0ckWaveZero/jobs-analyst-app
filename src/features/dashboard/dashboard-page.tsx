@@ -95,6 +95,8 @@ export function DashboardPage() {
         <StatCards />
       </div>
 
+      <RecentEntriesCard />
+
       <div className="grid gap-4 lg:grid-cols-5">
         <IssueStatusCard />
         <WorkHourCard />
@@ -106,8 +108,6 @@ export function DashboardPage() {
         <MyIssuesCard />
         <MeetingsCard />
       </div>
-
-      <RecentEntriesCard />
     </div>
   )
 }

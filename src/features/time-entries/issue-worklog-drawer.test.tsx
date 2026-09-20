@@ -106,6 +106,36 @@ describe('IssueWorklogDrawer', () => {
     ).toBeInTheDocument()
   })
 
+  it('กด Mine → กรองเหลือเฉพาะรายการของตัวเอง, กด All → กลับมาเห็นครบ', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await user.click(screen.getByText('2h 45m'))
+    await screen.findByText('งานดีไซน์')
+    expect(screen.getByText(/Mana Manager/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Mine' }))
+    expect(screen.getByText('งานดีไซน์')).toBeInTheDocument()
+    expect(screen.queryByText(/Mana Manager/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'All' }))
+    expect(screen.getByText(/Mana Manager/)).toBeInTheDocument()
+  })
+
+  it('กด Mine แล้วตัวเองไม่มีรายการ → empty state แบบ "คุณยังไม่มี..."', async () => {
+    const user = userEvent.setup()
+    sessionRef.current = {
+      user: { id: 'u99', name: 'Outsider', role: 'member' },
+    }
+    renderDrawer()
+    await user.click(screen.getByText('2h 45m'))
+    await screen.findByText('งานดีไซน์')
+
+    await user.click(screen.getByRole('button', { name: 'Mine' }))
+    expect(
+      await screen.findByText('คุณยังไม่มีรายการเวลาใน issue นี้'),
+    ).toBeInTheDocument()
+  })
+
   it('เจ้าของรายการเห็นปุ่มแก้/ลบเฉพาะรายการตัวเอง', async () => {
     const user = userEvent.setup()
     renderDrawer()

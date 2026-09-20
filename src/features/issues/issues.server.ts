@@ -4,6 +4,7 @@ import { getDb } from '@/db/client.server'
 import { issues, projects, user } from '@/db/schema'
 import { requireSession } from '@/features/auth/auth.server'
 import type { AuthSession } from '@/features/auth/auth.server'
+import { assertProjectActive } from '@/features/projects/projects.server'
 import type {
   CreateIssueInput,
   ListIssuesInput,
@@ -14,6 +15,7 @@ import type {
  * อ่าน: ทุกบทบาทที่ล็อกอิน
  * แก้ไข: admin ทุก issue, manager ในโปรเจกต์ที่ตัวเองเป็นเจ้าของ,
  *        member เฉพาะ issue ที่ตัวเองเป็น reporter หรือ assignee
+ * โปรเจกต์ archived แล้ว = ปิดงาน แก้ไข issue ต่อไม่ได้จนกว่าจะ unarchive
  */
 async function assertIssueManageAccess(session: AuthSession, issueId: number) {
   const db = getDb()!
@@ -22,12 +24,18 @@ async function assertIssueManageAccess(session: AuthSession, issueId: number) {
       reporterId: issues.reporterId,
       assigneeId: issues.assigneeId,
       ownerId: projects.ownerId,
+      projectStatus: projects.status,
     })
     .from(issues)
     .innerJoin(projects, eq(projects.id, issues.projectId))
     .where(eq(issues.id, issueId))
     .limit(1)
   if (!row) throw new Error('Issue not found')
+  if (row.projectStatus === 'archived') {
+    throw new Error(
+      'Project is archived — unarchive it before editing this issue',
+    )
+  }
 
   const role = session.user.role
   if (role === 'admin') return
@@ -56,6 +64,7 @@ function baseIssueSelect() {
     priority: issues.priority,
     dueDate: issues.dueDate,
     labels: issues.labels,
+    remainingEstimateMinutes: issues.remainingEstimateMinutes,
     createdAt: issues.createdAt,
     updatedAt: issues.updatedAt,
     assigneeId: issues.assigneeId,
@@ -140,6 +149,7 @@ export async function createIssueRecord(input: CreateIssueInput) {
   const session = await requireSession()
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
+  await assertProjectActive(input.projectId)
   await assertAssigneeAllowed(session, input.assigneeId)
 
   // เลขรันต่อโปรเจกต์: max + 1 (เริ่มที่ 101 ตาม ref)

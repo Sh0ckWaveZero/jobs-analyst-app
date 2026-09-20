@@ -5,6 +5,7 @@ import { Clock } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { authClient } from '@/features/auth/auth-client'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   deleteEntry,
   listIssueEntries,
@@ -39,6 +40,7 @@ export function IssueWorklogDrawer({
   const del = useServerFn(deleteEntry)
   const [open, setOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [onlyMine, setOnlyMine] = useState(false)
 
   const q = useQuery({
     queryKey: ['pm', 'issue-entries', issue.id],
@@ -84,13 +86,15 @@ export function IssueWorklogDrawer({
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs tabular-nums text-muted-foreground hover:text-foreground"
+          title="ดู work log"
         >
           <Clock className="size-3.5" />
           {formatDuration(totalMinutes)}
-        </button>
+        </Button>
       </SheetTrigger>
       <SheetContent
         side="right"
@@ -104,9 +108,36 @@ export function IssueWorklogDrawer({
         </SheetHeader>
 
         <div className="flex flex-col gap-3 px-4 pb-6">
+          <div className="flex w-fit rounded-lg border p-0.5 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setOnlyMine(false)}
+              className={`rounded-md px-2.5 py-1 transition-colors ${
+                !onlyMine
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyMine(true)}
+              className={`rounded-md px-2.5 py-1 transition-colors ${
+                onlyMine
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Mine
+            </button>
+          </div>
+
           {q.isLoading && <Skeleton className="h-16 w-full rounded-lg" />}
 
-          {(q.data ?? []).map((entry) =>
+          {(q.data ?? [])
+            .filter((entry) => !onlyMine || entry.userId === session?.user.id)
+            .map((entry) =>
             entry.id === editingId ? (
               <EditEntryForm
                 key={entry.id}
@@ -165,11 +196,16 @@ export function IssueWorklogDrawer({
             ),
           )}
 
-          {q.data?.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              ยังไม่มีรายการเวลาใน issue นี้
-            </p>
-          )}
+          {q.data &&
+            q.data.filter(
+              (entry) => !onlyMine || entry.userId === session?.user.id,
+            ).length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {onlyMine
+                  ? 'คุณยังไม่มีรายการเวลาใน issue นี้'
+                  : 'ยังไม่มีรายการเวลาใน issue นี้'}
+              </p>
+            )}
         </div>
       </SheetContent>
     </Sheet>
@@ -233,12 +269,7 @@ function EditEntryForm({
         </label>
         <label className="flex flex-col gap-1 text-xs">
           Work date
-          <Input
-            type="date"
-            value={workDate}
-            onChange={(e) => setWorkDate(e.target.value)}
-            className="h-8 text-sm"
-          />
+          <DatePicker value={workDate} onChange={setWorkDate} className="h-8 text-sm" />
         </label>
       </div>
       <label className="flex flex-col gap-1 text-xs">

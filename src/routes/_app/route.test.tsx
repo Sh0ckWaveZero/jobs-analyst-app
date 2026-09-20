@@ -25,6 +25,7 @@ vi.mock('@tanstack/react-router', () => ({
   }: {
     select: (s: { location: { pathname: string } }) => unknown
   }) => select({ location: { pathname: state.pathname } }),
+  useNavigate: () => vi.fn(),
 }))
 
 const options = Route.options as unknown as {

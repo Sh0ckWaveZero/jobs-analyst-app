@@ -2,10 +2,11 @@ import * as React from 'react'
 import { Toaster as Sonner } from 'sonner'
 import type { ToasterProps } from 'sonner'
 
-function Toaster({ ...props }: ToasterProps) {
+function Toaster({ position = 'top-right', ...props }: ToasterProps) {
   return (
     <Sonner
       className="toaster group"
+      position={position}
       style={
         {
           '--normal-bg': 'var(--popover)',

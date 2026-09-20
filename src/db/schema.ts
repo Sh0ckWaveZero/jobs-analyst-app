@@ -152,6 +152,8 @@ export const issues = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    /** เวลาคงเหลือโดยประมาณ (นาที) — ตั้ง/ปรับผ่าน Log Work dialog เท่านั้น */
+    remainingEstimateMinutes: integer('remaining_estimate_minutes'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

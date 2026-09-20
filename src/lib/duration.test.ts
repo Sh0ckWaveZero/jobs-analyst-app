@@ -16,6 +16,9 @@ describe('parseDuration', () => {
     ['  1h   45m  ', 105], // ช่องว่างรอบ ๆ / ตรงกลางเยอะได้
     ['30m 1h', 90], // สลับลำดับได้
     ['1h 0m', 60],
+    ['1d', 1440], // หน่วยวัน
+    ['1w', 10080], // หน่วยสัปดาห์
+    ['2w 4d 6h 45m', 26325], // ครบทุกหน่วยแบบในคำแนะนำของฟอร์ม
   ])('parseDuration(%j) = %i นาที', (input, expected) => {
     expect(parseDuration(input)).toBe(expected)
   })
@@ -31,15 +34,14 @@ describe('parseDuration', () => {
     ['0m'],
     ['0:00'],
     ['1:99'], // นาทีเกิน 59 ในรูปแบบ clock
-    ['24h 1m'], // เกิน 24 ชั่วโมง
-    ['1441'],
+    ['61d'], // เกิน 60 วัน
   ])('parseDuration(%j) = null', (input) => {
     expect(parseDuration(input)).toBeNull()
   })
 
-  it('ยอมรับสูงสุด 24 ชั่วโมง (1440)', () => {
-    expect(parseDuration('24h')).toBe(1440)
-    expect(parseDuration('1440')).toBe(1440)
+  it('ยอมรับสูงสุด 60 วัน (86400 นาที)', () => {
+    expect(parseDuration('60d')).toBe(86400)
+    expect(parseDuration('86400')).toBe(86400)
   })
 })
 
@@ -50,6 +52,9 @@ describe('formatDuration', () => {
     [45, '45m'],
     [0, '0m'],
     [120, '2h'],
+    [1440, '1d'],
+    [1470, '1d 30m'],
+    [1500, '1d 1h'],
   ])('formatDuration(%i) = %j', (minutes, expected) => {
     expect(formatDuration(minutes)).toBe(expected)
   })

@@ -4,6 +4,7 @@ import { getDb } from '@/db/client.server'
 import { issues, projects, timeEntries, user } from '@/db/schema'
 import { requireSession } from '@/features/auth/auth.server'
 import type { AuthSession } from '@/features/auth/auth.server'
+import { assertProjectActive } from '@/features/projects/projects.server'
 import type {
   AddManualEntryInput,
   AnalysisInput,
@@ -80,6 +81,7 @@ export async function startTimerRecord(
 ) {
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
+  await assertProjectActive(input.projectId)
 
   const running = await getRunningEntryRecord(session)
   if (running) {
@@ -143,11 +145,13 @@ export async function addManualEntryRecord(
 ) {
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
+  await assertProjectActive(input.projectId)
 
-  // workDate ตอน 09:00 ของวันนั้น (เวลาท้องถิ่น) เป็น startedAt ตัวแทน
+  // startedAt = workDate + startTime (ถ้าไม่ระบุเวลา ใช้ 09:00 เป็นตัวแทน)
   const [y, m, d] = input.workDate.split('-').map(Number)
   if (!y || !m || !d) throw new Error('invalid workDate')
-  const startedAt = new Date(y, m - 1, d, 9, 0, 0)
+  const [hh, mm] = (input.startTime ?? '09:00').split(':').map(Number)
+  const startedAt = new Date(y, m - 1, d, hh, mm, 0)
   const endedAt = new Date(startedAt.getTime() + input.minutes * 60_000)
 
   const [row] = await db
@@ -163,6 +167,14 @@ export async function addManualEntryRecord(
       workDate: input.workDate,
     })
     .returning()
+
+  if (input.issueId && input.remainingEstimateMinutes !== undefined) {
+    await db
+      .update(issues)
+      .set({ remainingEstimateMinutes: input.remainingEstimateMinutes })
+      .where(eq(issues.id, input.issueId))
+  }
+
   return row
 }
 

@@ -42,7 +42,10 @@ import {
   listIssues,
   updateIssue,
 } from '@/features/issues/issues.functions'
-import { getProjects } from '@/features/projects/projects.functions'
+import {
+  getArchivedProjects,
+  getProjects,
+} from '@/features/projects/projects.functions'
 import { getAssignableUsers } from '@/features/users/users.functions'
 import {
   Select,
@@ -74,13 +77,22 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const pid = Number(projectId)
   const { data: session } = authClient.useSession()
   const projects = useServerFn(getProjects)
+  const archivedFn = useServerFn(getArchivedProjects)
   const listIssuesFn = useServerFn(listIssues)
 
   const qProject = useQuery({
     queryKey: ['pm', 'projects'],
     queryFn: () => projects(),
   })
-  const project = qProject.data?.projects.find((p) => p.id === pid)
+  const qArchived = useQuery({
+    // key เดียวกับ sidebar — แชร์ cache กัน
+    queryKey: ['pm', 'projects-archived'],
+    queryFn: () => archivedFn(),
+  })
+  // โปรเจกต์ที่ archive แล้วยังเปิดดูได้จากหน้านี้ (sidebar ชี้มาที่นี่)
+  const project =
+    qProject.data?.projects.find((p) => p.id === pid) ??
+    qArchived.data?.find((p) => p.id === pid)
 
   const qIssues = useQuery({
     queryKey: ['pm', 'project-issues', pid],
@@ -89,9 +101,8 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
 
   const canManage =
     session?.user.role === 'admin' ||
-    (session?.user.role === 'manager' &&
-      qProject.data?.projects.find((p) => p.id === pid)?.ownerId ===
-        session.user.id)
+    (session?.user.role === 'manager' && project?.ownerId === session.user.id)
+  const isArchived = project?.status === 'archived'
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -108,18 +119,25 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
               {project?.key ?? '…'}
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                 {project?.name ?? <Skeleton className="h-8 w-48" />}
+                {isArchived && <Badge variant="secondary">Archived</Badge>}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {project?.description ?? ''}
               </p>
             </div>
           </div>
-          {(canManage || session?.user.role === 'member') && (
+          {!isArchived && (canManage || session?.user.role === 'member') && (
             <NewIssueForm projectId={pid} />
           )}
         </header>
+        {isArchived && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            โปรเจกต์นี้ถูก archive แล้ว — ดูข้อมูลได้อย่างเดียว
+            แก้ไข issue หรือลงเวลาใหม่ไม่ได้จนกว่าจะ unarchive
+          </p>
+        )}
       </div>
 
       <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
@@ -150,9 +168,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                     issueId={issue.id}
                     value={issue.status}
                     disabled={
-                      !canManage &&
-                      session?.user.id !== issue.reporterId &&
-                      session?.user.id !== issue.assigneeId
+                      isArchived ||
+                      (!canManage &&
+                        session?.user.id !== issue.reporterId &&
+                        session?.user.id !== issue.assigneeId)
                     }
                   />
                 </td>
@@ -179,25 +198,24 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                   {issue.dueDate ?? '—'}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                  {issue.totalMinutes > 0 ? (
-                    <IssueWorklogDrawer
-                      issue={issue}
-                      totalMinutes={issue.totalMinutes}
-                    />
-                  ) : (
-                    '—'
-                  )}
+                  <IssueWorklogDrawer
+                    issue={issue}
+                    totalMinutes={issue.totalMinutes}
+                  />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {(canManage ||
-                    session?.user.id === issue.reporterId ||
-                    session?.user.id === issue.assigneeId) && (
-                    <>
-                      <LogWorkDrawer projectId={pid} issue={issue} />
-                      <EditIssueDrawer issue={issue} />
-                    </>
+                  {!isArchived &&
+                    (canManage ||
+                      session?.user.id === issue.reporterId ||
+                      session?.user.id === issue.assigneeId) && (
+                      <>
+                        <LogWorkDrawer projectId={pid} issue={issue} />
+                        <EditIssueDrawer issue={issue} />
+                      </>
+                    )}
+                  {!isArchived && canManage && (
+                    <DeleteIssueButton issueId={issue.id} />
                   )}
-                  {canManage && <DeleteIssueButton issueId={issue.id} />}
                 </td>
               </tr>
             ))}
