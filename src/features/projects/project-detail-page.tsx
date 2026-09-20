@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { ArrowLeft, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 
 import {
   Form,
@@ -24,6 +25,15 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import type { IssueRow } from '@/features/issues/issues.server'
+import { LogWorkDrawer } from '@/features/time-entries/log-work-drawer'
+import { IssueWorklogDrawer } from '@/features/time-entries/issue-worklog-drawer'
+import {
+  IssueAssigneeField,
+  IssueDueDateField,
+  IssueLabelsField,
+  IssuePriorityField,
+  IssueTitleField,
+} from './issue-form-fields'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -32,7 +42,10 @@ import {
   listIssues,
   updateIssue,
 } from '@/features/issues/issues.functions'
-import { getProjects } from '@/features/projects/projects.functions'
+import {
+  getArchivedProjects,
+  getProjects,
+} from '@/features/projects/projects.functions'
 import { getAssignableUsers } from '@/features/users/users.functions'
 import {
   Select,
@@ -43,7 +56,6 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { IssueStatus } from '@/db/schema'
 
@@ -65,13 +77,22 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const pid = Number(projectId)
   const { data: session } = authClient.useSession()
   const projects = useServerFn(getProjects)
+  const archivedFn = useServerFn(getArchivedProjects)
   const listIssuesFn = useServerFn(listIssues)
 
   const qProject = useQuery({
     queryKey: ['pm', 'projects'],
     queryFn: () => projects(),
   })
-  const project = qProject.data?.projects.find((p) => p.id === pid)
+  const qArchived = useQuery({
+    // key เดียวกับ sidebar — แชร์ cache กัน
+    queryKey: ['pm', 'projects-archived'],
+    queryFn: () => archivedFn(),
+  })
+  // โปรเจกต์ที่ archive แล้วยังเปิดดูได้จากหน้านี้ (sidebar ชี้มาที่นี่)
+  const project =
+    qProject.data?.projects.find((p) => p.id === pid) ??
+    qArchived.data?.find((p) => p.id === pid)
 
   const qIssues = useQuery({
     queryKey: ['pm', 'project-issues', pid],
@@ -80,9 +101,8 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
 
   const canManage =
     session?.user.role === 'admin' ||
-    (session?.user.role === 'manager' &&
-      qProject.data?.projects.find((p) => p.id === pid)?.ownerId ===
-        session.user.id)
+    (session?.user.role === 'manager' && project?.ownerId === session.user.id)
+  const isArchived = project?.status === 'archived'
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -99,18 +119,25 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
               {project?.key ?? '…'}
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
                 {project?.name ?? <Skeleton className="h-8 w-48" />}
+                {isArchived && <Badge variant="secondary">Archived</Badge>}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {project?.description ?? ''}
               </p>
             </div>
           </div>
-          {(canManage || session?.user.role === 'member') && (
+          {!isArchived && (canManage || session?.user.role === 'member') && (
             <NewIssueForm projectId={pid} />
           )}
         </header>
+        {isArchived && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            โปรเจกต์นี้ถูก archive แล้ว — ดูข้อมูลได้อย่างเดียว
+            แก้ไข issue หรือลงเวลาใหม่ไม่ได้จนกว่าจะ unarchive
+          </p>
+        )}
       </div>
 
       <section className="overflow-x-auto rounded-xl border bg-card shadow-sm">
@@ -141,9 +168,10 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                     issueId={issue.id}
                     value={issue.status}
                     disabled={
-                      !canManage &&
-                      session?.user.id !== issue.reporterId &&
-                      session?.user.id !== issue.assigneeId
+                      isArchived ||
+                      (!canManage &&
+                        session?.user.id !== issue.reporterId &&
+                        session?.user.id !== issue.assigneeId)
                     }
                   />
                 </td>
@@ -170,17 +198,24 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                   {issue.dueDate ?? '—'}
                 </td>
                 <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                  {issue.totalMinutes > 0
-                    ? `${Math.floor(issue.totalMinutes / 60)}h ${issue.totalMinutes % 60}m`
-                    : '—'}
+                  <IssueWorklogDrawer
+                    issue={issue}
+                    totalMinutes={issue.totalMinutes}
+                  />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {(canManage ||
-                    session?.user.id === issue.reporterId ||
-                    session?.user.id === issue.assigneeId) && (
-                    <EditIssueDrawer issue={issue} />
+                  {!isArchived &&
+                    (canManage ||
+                      session?.user.id === issue.reporterId ||
+                      session?.user.id === issue.assigneeId) && (
+                      <>
+                        <LogWorkDrawer projectId={pid} issue={issue} />
+                        <EditIssueDrawer issue={issue} />
+                      </>
+                    )}
+                  {!isArchived && canManage && (
+                    <DeleteIssueButton issueId={issue.id} />
                   )}
-                  {canManage && <DeleteIssueButton issueId={issue.id} />}
                 </td>
               </tr>
             ))}
@@ -215,7 +250,14 @@ function StatusSelect({
   const mut = useMutation({
     mutationFn: (status: IssueStatus) =>
       update({ data: { id: issueId, status } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: (_data, status) => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success(`อัปเดตสถานะเป็น ${STATUS_LABELS[status]} แล้ว`)
+    },
+    onError: (err) =>
+      toast.error('เปลี่ยนสถานะไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   return (
@@ -243,7 +285,14 @@ function DeleteIssueButton({ issueId }: { issueId: number }) {
   const del = useServerFn(deleteIssue)
   const mut = useMutation({
     mutationFn: () => del({ data: { id: issueId } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('ลบ issue แล้ว')
+    },
+    onError: (err) =>
+      toast.error('ลบ issue ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   return (
@@ -314,11 +363,16 @@ function NewIssueForm({ projectId }: { projectId: number }) {
       setOpen(false)
       form.reset()
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('สร้าง issue แล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create',
-      }),
+      })
+      toast.error('สร้าง issue ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   function handleOpenChange(next: boolean) {
@@ -347,91 +401,29 @@ function NewIssueForm({ projectId }: { projectId: number }) {
         <FormField
           control={form.control}
           name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Title</FormLabel>
-              <FormControl>
-                <Input placeholder="What needs to be done?" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssueTitleField field={field} />}
         />
         <FormField
           control={form.control}
           name="priority"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Priority</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger className="w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="low">low</SelectItem>
-                  <SelectItem value="medium">medium</SelectItem>
-                  <SelectItem value="high">high</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssuePriorityField field={field} />}
         />
         <FormField
           control={form.control}
           name="assigneeId"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Assignee</FormLabel>
-              <Select
-                value={field.value || 'none'}
-                onValueChange={field.onChange}
-              >
-                <FormControl>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Unassigned" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {(qAssignable.data ?? []).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
+            <IssueAssigneeField field={field} users={qAssignable.data ?? []} />
           )}
         />
         <FormField
           control={form.control}
           name="dueDate"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Due date</FormLabel>
-              <FormControl>
-                <Input type="date" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssueDueDateField field={field} />}
         />
         <FormField
           control={form.control}
           name="labels"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Labels (comma)</FormLabel>
-              <FormControl>
-                <Input placeholder="frontend, api" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssueLabelsField field={field} />}
         />
             {form.formState.errors.root && (
               <p className="text-sm text-destructive">
@@ -516,11 +508,16 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
     onSuccess: () => {
       setOpen(false)
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('บันทึกการแก้ไข issue แล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to update',
-      }),
+      })
+      toast.error('แก้ไข issue ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   function handleOpenChange(next: boolean) {
@@ -560,15 +557,7 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
             <FormField
               control={form.control}
               name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="What needs to be done?" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssueTitleField field={field} />}
             />
             <FormField
               control={form.control}
@@ -599,78 +588,24 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
             <FormField
               control={form.control}
               name="priority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Priority</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="low">low</SelectItem>
-                      <SelectItem value="medium">medium</SelectItem>
-                      <SelectItem value="high">high</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssuePriorityField field={field} />}
             />
             <FormField
               control={form.control}
               name="assigneeId"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assignee</FormLabel>
-                  <Select
-                    value={field.value || 'none'}
-                    onValueChange={field.onChange}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Unassigned" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {(qAssignable.data ?? []).map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                <IssueAssigneeField field={field} users={qAssignable.data ?? []} />
               )}
             />
             <FormField
               control={form.control}
               name="dueDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Due date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssueDueDateField field={field} />}
             />
             <FormField
               control={form.control}
               name="labels"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Labels (comma)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="frontend, api" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssueLabelsField field={field} />}
             />
             {form.formState.errors.root && (
               <p className="text-sm text-destructive">

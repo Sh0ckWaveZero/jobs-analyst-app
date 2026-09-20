@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { FolderKanban, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -127,11 +128,16 @@ function NewProjectForm() {
       setOpen(false)
       form.reset()
       qc.invalidateQueries({ queryKey: ['pm', 'projects'] })
+      toast.success('สร้างโปรเจกต์แล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create',
-      }),
+      })
+      toast.error('สร้างโปรเจกต์ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   function handleOpenChange(next: boolean) {

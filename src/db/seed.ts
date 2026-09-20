@@ -62,13 +62,14 @@ async function main() {
   await db.delete(user)
   await db.delete(departments)
 
-  const password = await hashPassword('password123')
-
-  // แผนก: Engineering (manager/admin), Marketing (member + member2 — ทดสอบ assign แทนกันในแผนก)
-  const deptRows = await db
-    .insert(departments)
-    .values([{ name: 'Engineering' }, { name: 'Marketing' }])
-    .returning()
+  // hashPassword กับ insert แผนกอิสระต่อกัน — ทำขนาน
+  const [password, deptRows] = await Promise.all([
+    hashPassword('password123'),
+    db
+      .insert(departments)
+      .values([{ name: 'Engineering' }, { name: 'Marketing' }])
+      .returning(),
+  ])
   const deptId = (name: string) =>
     deptRows.find((d) => d.name === name)?.id ?? null
 
@@ -107,29 +108,32 @@ async function main() {
     'admin' | 'manager' | 'member' | 'member2',
     string
   >
-  for (const u of users) {
-    const id = randomUUID()
-    userIds[u.key] = id
-    await db.insert(user).values({
-      id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      departmentId: deptId(u.department),
-      emailVerified: true,
-      createdAt: daysAgo(SEED_DAYS + 5),
-      updatedAt: new Date(),
-    })
-    await db.insert(account).values({
-      id: randomUUID(),
-      accountId: id,
-      providerId: 'credential',
-      userId: id,
-      password,
-      createdAt: daysAgo(SEED_DAYS + 5),
-      updatedAt: new Date(),
-    })
-  }
+  // แต่ละ user อิสระต่อกัน (account ต้องตามหลัง user ตัวเดียวกันตาม FK)
+  await Promise.all(
+    users.map(async (u) => {
+      const id = randomUUID()
+      userIds[u.key] = id
+      await db.insert(user).values({
+        id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        departmentId: deptId(u.department),
+        emailVerified: true,
+        createdAt: daysAgo(SEED_DAYS + 5),
+        updatedAt: new Date(),
+      })
+      await db.insert(account).values({
+        id: randomUUID(),
+        accountId: id,
+        providerId: 'credential',
+        userId: id,
+        password,
+        createdAt: daysAgo(SEED_DAYS + 5),
+        updatedAt: new Date(),
+      })
+    }),
+  )
 
   const projectRows = await db
     .insert(projects)
@@ -296,10 +300,12 @@ async function main() {
       }
     }
   }
-  // chunk insert กัน bind ล้น
+  // chunk insert กัน bind ล้น — แต่ละ chunk อิสระ ใส่ขนาน
+  const chunks = []
   for (let i = 0; i < entries.length; i += 200) {
-    await db.insert(timeEntries).values(entries.slice(i, i + 200))
+    chunks.push(entries.slice(i, i + 200))
   }
+  await Promise.all(chunks.map((chunk) => db.insert(timeEntries).values(chunk)))
 
   console.log(
     `Seeded ${users.length} users, ${projectRows.length} projects, ${insertedIssues.length} issues, ${entries.length} time entries`,

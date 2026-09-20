@@ -4,12 +4,14 @@ import { getDb } from '@/db/client.server'
 import { issues, projects, timeEntries, user } from '@/db/schema'
 import { requireSession } from '@/features/auth/auth.server'
 import type { AuthSession } from '@/features/auth/auth.server'
+import { assertProjectActive } from '@/features/projects/projects.server'
 import type {
   AddManualEntryInput,
   AnalysisInput,
   AnalysisRange,
   StartTimerInput,
   StopTimerInput,
+  UpdateEntryInput,
 } from './time-entries.schema'
 
 const RANGE_DAYS: Record<AnalysisRange, number> = {
@@ -79,6 +81,7 @@ export async function startTimerRecord(
 ) {
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
+  await assertProjectActive(input.projectId)
 
   const running = await getRunningEntryRecord(session)
   if (running) {
@@ -142,11 +145,13 @@ export async function addManualEntryRecord(
 ) {
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
+  await assertProjectActive(input.projectId)
 
-  // workDate ตอน 09:00 ของวันนั้น (เวลาท้องถิ่น) เป็น startedAt ตัวแทน
+  // startedAt = workDate + startTime (ถ้าไม่ระบุเวลา ใช้ 09:00 เป็นตัวแทน)
   const [y, m, d] = input.workDate.split('-').map(Number)
   if (!y || !m || !d) throw new Error('invalid workDate')
-  const startedAt = new Date(y, m - 1, d, 9, 0, 0)
+  const [hh, mm] = (input.startTime ?? '09:00').split(':').map(Number)
+  const startedAt = new Date(y, m - 1, d, hh, mm, 0)
   const endedAt = new Date(startedAt.getTime() + input.minutes * 60_000)
 
   const [row] = await db
@@ -162,6 +167,14 @@ export async function addManualEntryRecord(
       workDate: input.workDate,
     })
     .returning()
+
+  if (input.issueId && input.remainingEstimateMinutes !== undefined) {
+    await db
+      .update(issues)
+      .set({ remainingEstimateMinutes: input.remainingEstimateMinutes })
+      .where(eq(issues.id, input.issueId))
+  }
+
   return row
 }
 
@@ -180,6 +193,82 @@ export async function deleteEntryRecord(session: AuthSession, id: number) {
   }
   await db.delete(timeEntries).where(eq(timeEntries.id, id))
   return { ok: true as const }
+}
+
+/** ประวัติเวลาราย issue (แบบ worklog ของ Jira) — อ่านได้ทุก role ที่ล็อกอิน */
+export async function listIssueEntriesRecord(issueId: number) {
+  await requireSession()
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  return db
+    .select({
+      id: timeEntries.id,
+      userId: timeEntries.userId,
+      userName: user.name,
+      durationMinutes: timeEntries.durationMinutes,
+      workDate: timeEntries.workDate,
+      note: timeEntries.note,
+      startedAt: timeEntries.startedAt,
+      running: sql<boolean>`(${timeEntries.endedAt} is null)`,
+    })
+    .from(timeEntries)
+    .leftJoin(user, eq(user.id, timeEntries.userId))
+    .where(eq(timeEntries.issueId, issueId))
+    .orderBy(desc(timeEntries.startedAt))
+}
+
+export type IssueEntryRow = Awaited<
+  ReturnType<typeof listIssueEntriesRecord>
+>[number]
+
+/** แก้ไขรายการเวลา — เจ้าของรายการหรือ admin เท่านั้น */
+export async function updateEntryRecord(
+  session: AuthSession,
+  input: UpdateEntryInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const [entry] = await db
+    .select()
+    .from(timeEntries)
+    .where(eq(timeEntries.id, input.id))
+    .limit(1)
+  if (!entry) throw new Error('Entry not found')
+  if (entry.userId !== session.user.id && session.user.role !== 'admin') {
+    throw new Error('Forbidden')
+  }
+
+  let startedAt = entry.startedAt
+  if (input.workDate && input.workDate !== entry.workDate) {
+    const [y, m, d] = input.workDate.split('-').map(Number)
+    if (!y || !m || !d) throw new Error('invalid workDate')
+    startedAt = new Date(
+      y,
+      m - 1,
+      d,
+      entry.startedAt.getHours(),
+      entry.startedAt.getMinutes(),
+    )
+  }
+  const minutes = input.minutes ?? entry.durationMinutes
+  const endedAt = entry.endedAt
+    ? new Date(startedAt.getTime() + minutes * 60_000)
+    : null
+
+  const [row] = await db
+    .update(timeEntries)
+    .set({
+      durationMinutes: minutes,
+      workDate: input.workDate ?? entry.workDate,
+      note: input.note === undefined ? entry.note : input.note,
+      startedAt,
+      endedAt,
+    })
+    .where(eq(timeEntries.id, input.id))
+    .returning()
+  return row
 }
 
 export async function listMyEntriesRecord(limit = 20) {
@@ -207,6 +296,43 @@ export async function listMyEntriesRecord(limit = 20) {
 }
 
 export type MyEntryRow = Awaited<ReturnType<typeof listMyEntriesRecord>>[number]
+
+/** รายงานเวลาต่อคน×ต่อโปรเจกต์ (หน้า Reports) — scope ตามบทบาทเดียวกับ analysis */
+export async function getWorkHourReportRecord(
+  session: AuthSession,
+  input: AnalysisInput,
+) {
+  const db = getDb()
+  if (!db) throw new Error('DATABASE_URL is not configured')
+
+  const days = RANGE_DAYS[input.range]
+  const fromDate = new Date()
+  fromDate.setDate(fromDate.getDate() - (days - 1))
+  fromDate.setHours(0, 0, 0, 0)
+
+  const scope = await analysisScope(session)
+  const filters = [gte(timeEntries.workDate, toWorkDate(fromDate))]
+
+  const rows = await db
+    .select({
+      userId: timeEntries.userId,
+      userName: user.name,
+      projectKey: projects.key,
+      projectName: projects.name,
+      minutes: sql<number>`sum(${timeEntries.durationMinutes})::int`,
+    })
+    .from(timeEntries)
+    .innerJoin(user, eq(user.id, timeEntries.userId))
+    .innerJoin(projects, eq(projects.id, timeEntries.projectId))
+    .where(scope ? and(scope, ...filters) : and(...filters))
+    .groupBy(timeEntries.userId, user.name, projects.key, projects.name)
+    .orderBy(user.name, desc(sql`sum(${timeEntries.durationMinutes})`))
+
+  const totalMinutes = rows.reduce((acc, r) => acc + r.minutes, 0)
+  return { range: input.range, rows, totalMinutes }
+}
+
+export type WorkHourReport = Awaited<ReturnType<typeof getWorkHourReportRecord>>
 
 export async function getWorkHourAnalysisRecord(
   session: AuthSession,

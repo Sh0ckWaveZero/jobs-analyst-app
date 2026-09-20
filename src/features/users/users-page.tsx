@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Plus, ShieldCheck, Users as UsersIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -48,6 +49,11 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const ROLES: Role[] = ['admin', 'manager', 'member']
+
+// format วันที่เป็น helper ระดับโมดูล — กันค่าต่าง timezone SSR/client
+function formatJoinedDate(date: Date) {
+  return date.toLocaleDateString()
+}
 
 const newUserFormSchema = createUserInputSchema.extend({
   // ฟอร์มรับ department เป็น string ('' = ไม่สังกัด) แล้วแปลงตอน submit
@@ -127,11 +133,16 @@ function NewUserForm() {
       setOpen(false)
       form.reset()
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('สร้างผู้ใช้แล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create',
-      }),
+      })
+      toast.error('สร้างผู้ใช้ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   function handleOpenChange(next: boolean) {
@@ -331,11 +342,19 @@ function UserRow({
 }) {
   const qc = useQueryClient()
   const update = useServerFn(updateUser)
+  const joinedText = useMemo(() => formatJoinedDate(u.createdAt), [u.createdAt])
 
   const mut = useMutation({
     mutationFn: (patch: { role?: Role; departmentId?: number | null }) =>
       update({ data: { id: u.id, ...patch } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('อัปเดตข้อมูลผู้ใช้แล้ว')
+    },
+    onError: (err) =>
+      toast.error('อัปเดตผู้ใช้ไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   return (
@@ -382,7 +401,7 @@ function UserRow({
         </Select>
       </td>
       <td className="px-4 py-3 tabular-nums text-muted-foreground">
-        {new Date(u.createdAt).toLocaleDateString()}
+        {joinedText}
       </td>
     </tr>
   )
@@ -408,11 +427,16 @@ function DepartmentsCard() {
     onSuccess: () => {
       form.reset()
       qc.invalidateQueries({ queryKey: ['pm', 'departments'] })
+      toast.success('เพิ่มแผนกแล้ว')
     },
-    onError: (err) =>
+    onError: (err) => {
       form.setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create',
-      }),
+      })
+      toast.error('เพิ่มแผนกไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    },
   })
 
   return (

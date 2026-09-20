@@ -4,6 +4,7 @@ import { getDb } from '@/db/client.server'
 import { issues, projects, user } from '@/db/schema'
 import { requireSession } from '@/features/auth/auth.server'
 import type { AuthSession } from '@/features/auth/auth.server'
+import { assertProjectActive } from '@/features/projects/projects.server'
 import type {
   CreateIssueInput,
   ListIssuesInput,
@@ -14,6 +15,7 @@ import type {
  * อ่าน: ทุกบทบาทที่ล็อกอิน
  * แก้ไข: admin ทุก issue, manager ในโปรเจกต์ที่ตัวเองเป็นเจ้าของ,
  *        member เฉพาะ issue ที่ตัวเองเป็น reporter หรือ assignee
+ * โปรเจกต์ archived แล้ว = ปิดงาน แก้ไข issue ต่อไม่ได้จนกว่าจะ unarchive
  */
 async function assertIssueManageAccess(session: AuthSession, issueId: number) {
   const db = getDb()!
@@ -22,12 +24,18 @@ async function assertIssueManageAccess(session: AuthSession, issueId: number) {
       reporterId: issues.reporterId,
       assigneeId: issues.assigneeId,
       ownerId: projects.ownerId,
+      projectStatus: projects.status,
     })
     .from(issues)
     .innerJoin(projects, eq(projects.id, issues.projectId))
     .where(eq(issues.id, issueId))
     .limit(1)
   if (!row) throw new Error('Issue not found')
+  if (row.projectStatus === 'archived') {
+    throw new Error(
+      'Project is archived — unarchive it before editing this issue',
+    )
+  }
 
   const role = session.user.role
   if (role === 'admin') return
@@ -56,6 +64,7 @@ function baseIssueSelect() {
     priority: issues.priority,
     dueDate: issues.dueDate,
     labels: issues.labels,
+    remainingEstimateMinutes: issues.remainingEstimateMinutes,
     createdAt: issues.createdAt,
     updatedAt: issues.updatedAt,
     assigneeId: issues.assigneeId,
@@ -136,37 +145,53 @@ async function assertAssigneeAllowed(
   )
 }
 
+const UNIQUE_VIOLATION = '23505'
+const MAX_NUMBER_ATTEMPTS = 5
+
 export async function createIssueRecord(input: CreateIssueInput) {
   const session = await requireSession()
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
+  await assertProjectActive(input.projectId)
   await assertAssigneeAllowed(session, input.assigneeId)
 
-  // เลขรันต่อโปรเจกต์: max + 1 (เริ่มที่ 101 ตาม ref)
-  const [maxRow] = await db
-    .select({
-      maxNumber: sql<number>`coalesce(max(${issues.number}), 100)`,
-    })
-    .from(issues)
-    .where(eq(issues.projectId, input.projectId))
-  const maxNumber = maxRow?.maxNumber ?? 100
+  // เลขรันต่อโปรเจกต์: max + 1 (เริ่มที่ 101 ตาม ref) — DB มี unique
+  // constraint กัน (projectId, number) ซ้ำ ถ้าสร้างพร้อมกันแล้วเลขชนกัน
+  // ให้อ่าน max ใหม่แล้วลองอีกครั้งแทนที่จะปล่อยให้ error หลุดออกไปตรงๆ
+  for (let attempt = 1; attempt <= MAX_NUMBER_ATTEMPTS; attempt++) {
+    const [maxRow] = await db
+      .select({
+        maxNumber: sql<number>`coalesce(max(${issues.number}), 100)`,
+      })
+      .from(issues)
+      .where(eq(issues.projectId, input.projectId))
+    const maxNumber = maxRow?.maxNumber ?? 100
 
-  const [row] = await db
-    .insert(issues)
-    .values({
-      projectId: input.projectId,
-      number: maxNumber + 1,
-      title: input.title,
-      description: input.description,
-      status: input.status,
-      priority: input.priority,
-      assigneeId: input.assigneeId || null,
-      reporterId: session.user.id,
-      dueDate: input.dueDate,
-      labels: input.labels ?? [],
-    })
-    .returning()
-  return row
+    try {
+      const [row] = await db
+        .insert(issues)
+        .values({
+          projectId: input.projectId,
+          number: maxNumber + 1,
+          title: input.title,
+          description: input.description,
+          status: input.status,
+          priority: input.priority,
+          assigneeId: input.assigneeId || null,
+          reporterId: session.user.id,
+          dueDate: input.dueDate,
+          labels: input.labels ?? [],
+        })
+        .returning()
+      return row
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code
+      if (code !== UNIQUE_VIOLATION || attempt === MAX_NUMBER_ATTEMPTS) {
+        throw err
+      }
+    }
+  }
+  throw new Error('Failed to create issue — number conflicts, please retry')
 }
 
 export async function updateIssueRecord(input: UpdateIssueInput) {
@@ -205,20 +230,22 @@ export async function getDashboardCountsRecord(session: AuthSession) {
   if (!db) throw new Error('DATABASE_URL is not configured')
   const uid = session.user.id
 
-  const [created] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(issues)
-    .where(eq(issues.reporterId, uid))
-  const [assigned] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(issues)
-    .where(eq(issues.assigneeId, uid))
-
-  const statusRows = await db
-    .select({ status: issues.status, count: sql<number>`count(*)::int` })
-    .from(issues)
-    .where(eq(issues.assigneeId, uid))
-    .groupBy(issues.status)
+  // สาม query อิสระต่อกัน — ยิงขนาน
+  const [[created], [assigned], statusRows] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(issues)
+      .where(eq(issues.reporterId, uid)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(issues)
+      .where(eq(issues.assigneeId, uid)),
+    db
+      .select({ status: issues.status, count: sql<number>`count(*)::int` })
+      .from(issues)
+      .where(eq(issues.assigneeId, uid))
+      .groupBy(issues.status),
+  ])
 
   const counts = {
     backlog: 0,

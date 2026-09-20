@@ -15,6 +15,20 @@
       "when": 1789829177550,
       "tag": "0001_short_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789866839373,
+      "tag": "0002_good_paper_doll",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789873343244,
+      "tag": "0003_moaning_psylocke",
+      "breakpoints": true
     }
   ]
 }

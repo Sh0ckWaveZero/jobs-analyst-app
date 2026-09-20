@@ -1,18 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import {
   CalendarDays,
   CircleDot,
@@ -21,6 +12,7 @@ import {
   Pause,
   Play,
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -58,7 +50,18 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { IssueStatus } from '@/db/schema'
 
+// recharts หนัก — โหลดแบบ lazy เฉพาะตอนมีข้อมูลกราฟ
+const WorkHourChart = lazy(() =>
+  import('./work-hour-chart').then((m) => ({ default: m.WorkHourChart })),
+)
+
 const RANGES = ['5D', '2W', '1M', '6M', '1Y'] as const
+
+// format วันที่เป็น helper ระดับโมดูล — ห้ามเรียก toLocale ใน render
+// เพราะค่าอาจต่างกันระหว่าง SSR (server timezone) กับ client
+function formatClockTime(date: Date | string) {
+  return new Date(date).toLocaleTimeString()
+}
 
 const STATUS_LABELS: Record<IssueStatus, string> = {
   backlog: 'Backlog',
@@ -92,6 +95,8 @@ export function DashboardPage() {
         <StatCards />
       </div>
 
+      <RecentEntriesCard />
+
       <div className="grid gap-4 lg:grid-cols-5">
         <IssueStatusCard />
         <WorkHourCard />
@@ -103,8 +108,6 @@ export function DashboardPage() {
         <MyIssuesCard />
         <MeetingsCard />
       </div>
-
-      <RecentEntriesCard />
     </div>
   )
 }
@@ -268,32 +271,9 @@ function WorkHourCard() {
       </div>
       <div className="h-48">
         {q.data ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
-              <CartesianGrid vertical={false} strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                fontSize={10}
-                interval="preserveStartEnd"
-                minTickGap={24}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                fontSize={10}
-                width={28}
-                unit="h"
-              />
-              <ChartTooltip formatter={(v) => [`${v}h`, 'Work']} />
-              <Bar
-                dataKey="hours"
-                fill="hsl(var(--primary))"
-                radius={[3, 3, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<Skeleton className="h-full w-full" />}>
+            <WorkHourChart data={chartData} />
+          </Suspense>
         ) : (
           <Skeleton className="h-full w-full" />
         )}
@@ -341,6 +321,13 @@ function TimeTrackerCard() {
   })
 
   const [elapsed, setElapsed] = useState(0)
+  const startedAt = qRunning.data?.startedAt
+  // format ผ่าน helper นอก component + useMemo — กันค่าต่าง timezone
+  // ระหว่าง SSR/client และไม่สร้าง string ใหม่ทุก render
+  const startedAtText = useMemo(
+    () => (startedAt ? formatClockTime(startedAt) : ''),
+    [startedAt],
+  )
   useEffect(() => {
     if (!qRunning.data) return
     const started = new Date(qRunning.data.startedAt).getTime()
@@ -362,7 +349,12 @@ function TimeTrackerCard() {
     onSuccess: (_data, variables) => {
       form.reset({ projectId: variables.projectId, issueId: '', note: '' })
       qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('เริ่มจับเวลาแล้ว')
     },
+    onError: (err) =>
+      toast.error('เริ่มจับเวลาไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
   const stopMut = useMutation({
     mutationFn: () => {
@@ -370,7 +362,14 @@ function TimeTrackerCard() {
       if (!id) throw new Error('No running timer')
       return stop({ data: { entryId: id } })
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pm'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pm'] })
+      toast.success('หยุดจับเวลาและบันทึกรายการแล้ว')
+    },
+    onError: (err) =>
+      toast.error('หยุดจับเวลาไม่สำเร็จ', {
+        description: err instanceof Error ? err.message : undefined,
+      }),
   })
 
   const hhmmss = (s: number) =>
@@ -394,8 +393,7 @@ function TimeTrackerCard() {
               {qRunning.data.issueTitle ?? qRunning.data.note ?? 'Working…'}
             </p>
             <p className="text-xs text-muted-foreground">
-              started at{' '}
-              {new Date(qRunning.data.startedAt).toLocaleTimeString()}
+              started at {startedAtText}
             </p>
           </div>
           <Button
@@ -496,13 +494,6 @@ function TimeTrackerCard() {
             </Button>
           </form>
         </Form>
-      )}
-      {startMut.isError && (
-        <p className="mt-3 text-sm text-destructive">
-          {startMut.error instanceof Error
-            ? startMut.error.message
-            : 'Failed to start'}
-        </p>
       )}
     </Card>
   )

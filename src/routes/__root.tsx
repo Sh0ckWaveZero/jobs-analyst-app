@@ -3,15 +3,18 @@ import {
   Link,
   Outlet,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 
 import appCss from '../styles.css?url'
+import { Toaster } from '@/components/ui/sonner'
 
-const queryClient = new QueryClient()
-
-export const Route = createRootRoute({
+// queryClient มาจาก router context (สร้างใน src/router.tsx)
+// QueryClientProvider ถูก wrap โดย setupRouterSsrQueryIntegration
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
   head: () => ({
     meta: [
       {
@@ -27,6 +30,19 @@ export const Route = createRootRoute({
     ],
     links: [
       {
+        rel: 'preconnect',
+        href: 'https://fonts.googleapis.com',
+      },
+      {
+        rel: 'preconnect',
+        href: 'https://fonts.gstatic.com',
+        crossOrigin: 'anonymous',
+      },
+      {
+        rel: 'stylesheet',
+        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap',
+      },
+      {
         rel: 'stylesheet',
         href: appCss,
       },
@@ -39,16 +55,21 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <Outlet />
-    </QueryClientProvider>
+      <Toaster />
+    </>
   )
 }
 
+// ตั้ง class .dark ก่อน React hydrate เพื่อกันหน้าจอกะพริบสลับธีม
+const themeInitScript = `(function(){try{var t=localStorage.getItem('theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <HeadContent />
       </head>
       <body suppressHydrationWarning>

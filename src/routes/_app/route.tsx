@@ -6,6 +6,8 @@ import {
 } from '@tanstack/react-router'
 
 import { AppSidebar } from '@/components/layout/app-sidebar'
+import { CommandMenu, NotificationsMenu } from '@/components/layout/command-menu'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { getSession } from '@/features/auth/auth.functions'
 import {
   SidebarInset,
@@ -52,6 +54,11 @@ function AppLayout() {
           <span className="text-sm font-medium text-muted-foreground">
             {title}
           </span>
+          <div className="ml-auto flex items-center gap-2">
+            <CommandMenu />
+            <NotificationsMenu />
+            <ThemeToggle />
+          </div>
         </header>
         <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
           <Outlet />
