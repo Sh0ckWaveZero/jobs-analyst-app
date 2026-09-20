@@ -13,23 +13,39 @@ if (!db) {
   throw new Error('DATABASE_URL is not set — better-auth requires a database')
 }
 
+// dev เท่านั้น — ครอบคลุม localhost + LAN IP ทั่วไป เพื่อทดสอบข้ามเครื่องได้
+const DEV_ALLOWED_HOSTS = [
+  'localhost:3000',
+  '127.0.0.1:3000',
+  '192.168.*:3000',
+  '10.*:3000',
+  '172.*:3000',
+  '100.*:3000',
+]
+
 /**
  * BETTER_AUTH_URL ต้องเป็น absolute URL — ถ้าค่าใน env ผิด (เช่น ใส่สลับกับ secret)
- * ข้ามค่านั้นไปใช้ same-origin detection แทน ไม่เช่นนั้น server จะ crash ตอน boot
+ * ข้ามค่านั้นไปใช้ dynamic host allowlist แทน ไม่เช่นนั้น server จะ crash ตอน boot
+ *
+ * ห้ามปล่อย baseURL เป็น undefined เฉยๆ ตอนไม่ตั้ง env — เจอบั๊กจริงว่า better-auth
+ * คำนวณ origin ไม่นิ่งพอที่จะออก Set-Cookie ถูกต้องเสมอ ทำให้ session cookie หายกลาง
+ * อากาศเป็นระยะ ใช้ dynamic baseURL + allowedHosts แทน ปลอดภัยกว่า (มี allowlist)
+ * และยังรองรับ localhost คู่กับ IP วง LAN เหมือนเดิม
  */
-function resolveBaseURL(): string | undefined {
+function resolveBaseURL(): string | { allowedHosts: string[]; fallback: string } {
   const raw = process.env.BETTER_AUTH_URL
-  if (!raw) return undefined
-  try {
-    return new URL(raw).origin === 'null' ? undefined : raw
-  } catch {
-    // better-auth อ่าน env นี้เองตอน init — ต้องลบทิ้งจาก process ด้วย
-    delete process.env.BETTER_AUTH_URL
-    console.warn(
-      `Ignoring invalid BETTER_AUTH_URL ("${raw.slice(0, 8)}…") — falling back to request origin. ตั้งค่าเป็น absolute URL เช่น http://localhost:3000`,
-    )
-    return undefined
+  if (raw) {
+    try {
+      if (new URL(raw).origin !== 'null') return raw
+    } catch {
+      // better-auth อ่าน env นี้เองตอน init — ต้องลบทิ้งจาก process ด้วย
+      delete process.env.BETTER_AUTH_URL
+      console.warn(
+        `Ignoring invalid BETTER_AUTH_URL ("${raw.slice(0, 8)}…") — falling back to host allowlist. ตั้งค่าเป็น absolute URL เช่น http://localhost:3000`,
+      )
+    }
   }
+  return { allowedHosts: DEV_ALLOWED_HOSTS, fallback: 'http://localhost:3000' }
 }
 
 export const auth = betterAuth({
