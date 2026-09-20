@@ -53,11 +53,14 @@ bun run db:seed
 | --------------- | ----------------------------------------- | ------------------------------------------------------- |
 | `/login`        | `src/routes/login.tsx`                    | Sign in / Sign up                                       |
 | `/`             | `src/routes/_app/index.tsx`               | Dashboard (Work Hour Analysis, Time Tracker, My Issues) |
-| `/projects`     | `src/routes/_app/projects.tsx`            | รายการโปรเจกต์ + สร้างโปรเจกต์                          |
-| `/projects/$id` | `src/routes/_app/projects.$projectId.tsx` | Issues ของโปรเจกต์                                      |
-| `/reports`      | `src/routes/_app/reports.tsx`             | Reports (รอต่อยอด)                                      |
+| `/projects`     | `src/routes/_app/projects.index.tsx`      | รายการโปรเจกต์ + สร้างโปรเจกต์                          |
+| `/projects/$id` | `src/routes/_app/projects.$projectId.tsx` | Issues ของโปรเจกต์ + Log Work + Time tracking           |
+| `/reports`      | `src/routes/_app/reports.tsx`             | รายงานชั่วโมงทำงานต่อคนต่อโปรเจกต์ + Export CSV         |
 | `/settings`     | `src/routes/_app/settings.tsx`            | โปรไฟล์และสิทธิ์                                        |
+| `/users`        | `src/routes/_app/users.tsx`               | จัดการผู้ใช้/แผนก (admin เท่านั้น)                      |
 | `/api/auth/*`   | `src/routes/api/auth/$.ts`                | Better Auth handler                                     |
+
+อธิบายวิธีใช้แต่ละหน้าแบบละเอียด (role ไหนทำอะไรได้บ้าง, Log Work ใช้ยังไง, ⌘K ค้นอะไรได้) อยู่ที่ [`docs/user-guide.md`](docs/user-guide.md)
 
 `src/routes/_app/route.tsx` เป็น pathless layout + auth guard (redirect ไป `/login` ถ้าไม่มี session)
 
