@@ -13,6 +13,13 @@ vi.mock('@tanstack/react-start', () => ({ useServerFn: (fn: unknown) => fn }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => state.navigate,
 }))
+vi.mock('@/features/auth/auth-client', () => ({
+  authClient: {
+    useSession: () => ({
+      data: { user: { role: 'admin' } },
+    }),
+  },
+}))
 vi.mock('@/features/projects/projects.functions', () => ({
   getProjects: vi.fn(),
 }))
@@ -104,5 +111,43 @@ describe('CommandMenu', () => {
       await screen.findByText('Finalize design system tokens'),
     ).toBeInTheDocument()
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('ค้นหา Settings submenu แล้วเปิดความปลอดภัยได้', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+
+    await user.click(screen.getByRole('button', { name: /Search/ }))
+    await user.type(screen.getByPlaceholderText(/ค้นหา/), 'ความปลอดภัย')
+
+    expect(
+      await screen.findByRole('option', {
+        name: /^ความปลอดภัย$/,
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('option', { name: /^ความปลอดภัย$/ }))
+
+    expect(state.navigate).toHaveBeenCalledWith({
+      to: '/settings',
+      search: { tab: 'security', section: 'departments' },
+    })
+  })
+
+  it('ล้างคำค้นด้วยปุ่ม clear ได้', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+
+    await user.click(screen.getByRole('button', { name: /Search/ }))
+    const input = screen.getByRole('combobox')
+    await user.type(input, 'Security')
+
+    const clearButton = screen.getByRole('button', { name: 'ล้างการค้นหา' })
+    expect(clearButton).toBeEnabled()
+    await user.click(clearButton)
+
+    expect(input).toHaveValue('')
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
   })
 })

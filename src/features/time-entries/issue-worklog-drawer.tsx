@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { Clock } from 'lucide-react'
+import { Clock, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { queryKeys } from '@/lib/query-keys'
+import { Role } from '@/lib/roles'
 import { authClient } from '@/features/auth/auth-client'
 import { DatePicker } from '@/components/ui/date-picker'
 import {
@@ -25,12 +28,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export function IssueWorklogDrawer({
   issue,
   totalMinutes,
 }: {
-  issue: { id: number; key: string; title: string }
+  issue: { id: number; key: string; title: string; projectId: number }
   totalMinutes: number
 }) {
   const { data: session } = authClient.useSession()
@@ -43,7 +47,7 @@ export function IssueWorklogDrawer({
   const [onlyMine, setOnlyMine] = useState(false)
 
   const q = useQuery({
-    queryKey: ['pm', 'issue-entries', issue.id],
+    queryKey: queryKeys.issueEntries(issue.id),
     queryFn: () => entriesFn({ data: { issueId: issue.id } }),
     enabled: open,
   })
@@ -51,7 +55,7 @@ export function IssueWorklogDrawer({
   const delMut = useMutation({
     mutationFn: (id: number) => del({ data: { id } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('ลบรายการเวลาแล้ว')
     },
     onError: (err) =>
@@ -69,7 +73,7 @@ export function IssueWorklogDrawer({
     }) => update({ data: input }),
     onSuccess: () => {
       setEditingId(null)
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success('แก้ไขรายการเวลาแล้ว')
     },
     onError: (err) =>
@@ -83,22 +87,34 @@ export function IssueWorklogDrawer({
     if (!next) setEditingId(null)
   }
 
+  const filteredEntries = (q.data ?? []).filter(
+    (entry) => !onlyMine || entry.userId === session?.user.id,
+  )
+  const visibleEntries = filteredEntries.slice(0, 5)
+
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs tabular-nums text-muted-foreground hover:text-foreground"
-          title="ดู work log"
-        >
-          <Clock className="size-3.5" />
-          {formatDuration(totalMinutes)}
-        </Button>
-      </SheetTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs tabular-nums text-muted-foreground hover:text-foreground"
+              aria-label="View work log"
+            >
+              <Clock className="size-3.5" />
+              {formatDuration(totalMinutes)}
+            </Button>
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent>View work log</TooltipContent>
+      </Tooltip>
       <SheetContent
         side="right"
         className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <SheetHeader>
           <SheetTitle>Work log</SheetTitle>
@@ -135,9 +151,7 @@ export function IssueWorklogDrawer({
 
           {q.isLoading && <Skeleton className="h-16 w-full rounded-lg" />}
 
-          {(q.data ?? [])
-            .filter((entry) => !onlyMine || entry.userId === session?.user.id)
-            .map((entry) =>
+          {visibleEntries.map((entry) =>
             entry.id === editingId ? (
               <EditEntryForm
                 key={entry.id}
@@ -173,39 +187,58 @@ export function IssueWorklogDrawer({
                 </div>
                 {canEditEntry(session?.user.id, session?.user.role, entry) && (
                   <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => setEditingId(entry.id)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => delMut.mutate(entry.id)}
-                      disabled={delMut.isPending}
-                    >
-                      delete
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditingId(entry.id)}
+                          aria-label="Edit entry"
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit entry</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => delMut.mutate(entry.id)}
+                          disabled={delMut.isPending}
+                          aria-label="Delete entry"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Delete entry</TooltipContent>
+                    </Tooltip>
                   </div>
                 )}
               </div>
             ),
           )}
 
-          {q.data &&
-            q.data.filter(
-              (entry) => !onlyMine || entry.userId === session?.user.id,
-            ).length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                {onlyMine
-                  ? 'คุณยังไม่มีรายการเวลาใน issue นี้'
-                  : 'ยังไม่มีรายการเวลาใน issue นี้'}
-              </p>
-            )}
+          {filteredEntries.length > 5 && (
+            <Link
+              to="/issues/$issueId"
+              params={{ issueId: String(issue.id) }}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              View all ({filteredEntries.length} entries)
+            </Link>
+          )}
+
+          {!q.isLoading && filteredEntries.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {onlyMine
+                ? 'คุณยังไม่มีรายการเวลาใน issue นี้'
+                : 'ยังไม่มีรายการเวลาใน issue นี้'}
+            </p>
+          )}
         </div>
       </SheetContent>
     </Sheet>
@@ -217,7 +250,7 @@ function canEditEntry(
   role: string | null | undefined,
   entry: IssueEntryRow,
 ) {
-  return role === 'admin' || (userId != null && userId === entry.userId)
+  return role === Role.Admin || (userId != null && userId === entry.userId)
 }
 
 function EditEntryForm({

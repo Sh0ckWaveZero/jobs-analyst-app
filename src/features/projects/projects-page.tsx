@@ -9,6 +9,8 @@ import { FolderKanban, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { authClient } from '@/features/auth/auth-client'
+import { queryKeys } from '@/lib/query-keys'
+import { Role } from '@/lib/roles'
 import {
   createProject,
   getProjects,
@@ -44,11 +46,11 @@ export function ProjectsPage() {
   const { data: session } = authClient.useSession()
   const projects = useServerFn(getProjects)
   const q = useQuery({
-    queryKey: ['pm', 'projects'],
+    queryKey: queryKeys.projects,
     queryFn: () => projects(),
   })
   const canCreate =
-    session?.user.role === 'admin' || session?.user.role === 'manager'
+    session?.user.role === Role.Admin || session?.user.role === Role.Manager
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -73,7 +75,10 @@ export function ProjectsPage() {
             className="group rounded-xl border bg-card p-5 shadow-sm transition-colors hover:bg-accent/40"
           >
             <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 font-mono text-xs font-bold text-primary">
+              <div
+                className="flex size-9 items-center justify-center rounded-lg bg-primary/10 font-mono text-xs font-bold text-primary"
+                style={{ viewTransitionName: `project-key-${p.id}` }}
+              >
                 {p.key}
               </div>
               <div className="min-w-0">
@@ -127,7 +132,7 @@ function NewProjectForm() {
     onSuccess: () => {
       setOpen(false)
       form.reset()
-      qc.invalidateQueries({ queryKey: ['pm', 'projects'] })
+      qc.invalidateQueries({ queryKey: queryKeys.projects })
       toast.success('สร้างโปรเจกต์แล้ว')
     },
     onError: (err) => {
@@ -152,7 +157,12 @@ function NewProjectForm() {
           <Plus className="size-4" /> New project
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <SheetHeader>
           <SheetTitle>New project</SheetTitle>
           <SheetDescription>สร้างโปรเจกต์ใหม่เพื่อเริ่มจัดการงาน</SheetDescription>

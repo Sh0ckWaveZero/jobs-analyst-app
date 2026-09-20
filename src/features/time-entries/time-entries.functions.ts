@@ -3,7 +3,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { requireSession } from '@/features/auth/auth.server'
 import {
   addManualEntryRecord,
+  countIssueEntriesRecord,
+  countMyEntriesRecord,
   deleteEntryRecord,
+  getIssueMetaRecord,
   getMyWeekMinutesRecord,
   getRunningEntryRecord,
   getWorkHourAnalysisRecord,
@@ -62,7 +65,19 @@ export const deleteEntry = createServerFn({ method: 'POST' })
 
 export const listIssueEntries = createServerFn({ method: 'GET' })
   .validator(issueEntriesInputSchema)
-  .handler(({ data }) => listIssueEntriesRecord(data.issueId))
+  .handler(({ data }) =>
+    listIssueEntriesRecord(data.issueId, data.limit, data.offset, data.userId),
+  )
+
+export const countIssueEntries = createServerFn({ method: 'GET' })
+  .validator(issueEntriesInputSchema)
+  .handler(({ data }) =>
+    countIssueEntriesRecord(data.issueId, data.userId),
+  )
+
+export const getIssueMeta = createServerFn({ method: 'GET' })
+  .validator(issueEntriesInputSchema)
+  .handler(({ data }) => getIssueMetaRecord(data.issueId))
 
 export const updateEntry = createServerFn({ method: 'POST' })
   .validator(updateEntryInputSchema)
@@ -73,7 +88,11 @@ export const updateEntry = createServerFn({ method: 'POST' })
 
 export const listMyEntries = createServerFn({ method: 'GET' })
   .validator(myEntriesInputSchema)
-  .handler(({ data }) => listMyEntriesRecord(data.limit))
+  .handler(({ data }) => listMyEntriesRecord(data.limit, data.offset))
+
+export const countMyEntries = createServerFn({ method: 'GET' }).handler(
+  async () => countMyEntriesRecord(),
+)
 
 export const getWorkHourAnalysis = createServerFn({ method: 'GET' })
   .validator(analysisInputSchema)

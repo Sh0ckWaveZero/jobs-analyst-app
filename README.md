@@ -49,16 +49,17 @@ bun run db:seed
 
 ## Routes
 
-| URL             | Route file                                | หน้าที่                                                 |
-| --------------- | ----------------------------------------- | ------------------------------------------------------- |
-| `/login`        | `src/routes/login.tsx`                    | Sign in / Sign up                                       |
-| `/`             | `src/routes/_app/index.tsx`               | Dashboard (Work Hour Analysis, Time Tracker, My Issues) |
-| `/projects`     | `src/routes/_app/projects.index.tsx`      | รายการโปรเจกต์ + สร้างโปรเจกต์                          |
-| `/projects/$id` | `src/routes/_app/projects.$projectId.tsx` | Issues ของโปรเจกต์ + Log Work + Time tracking           |
-| `/reports`      | `src/routes/_app/reports.tsx`             | รายงานชั่วโมงทำงานต่อคนต่อโปรเจกต์ + Export CSV         |
-| `/settings`     | `src/routes/_app/settings.tsx`            | โปรไฟล์และสิทธิ์                                        |
-| `/users`        | `src/routes/_app/users.tsx`               | จัดการผู้ใช้/แผนก (admin เท่านั้น)                      |
-| `/api/auth/*`   | `src/routes/api/auth/$.ts`                | Better Auth handler                                     |
+| URL                    | Route file                                | หน้าที่                                                                                                  |
+| ---------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `/login`               | `src/routes/login.tsx`                    | Sign in / Sign up                                                                                        |
+| `/`                    | `src/routes/_app/index.tsx`               | Dashboard (Work Hour Analysis, Time Tracker, My Issues)                                                  |
+| `/projects`            | `src/routes/_app/projects.index.tsx`      | รายการโปรเจกต์ + สร้างโปรเจกต์                                                                           |
+| `/projects/$id`        | `src/routes/_app/projects.$projectId.tsx` | Issues ของโปรเจกต์ + Log Work + Time tracking                                                            |
+| `/reports`             | `src/routes/_app/reports.tsx`             | รายงานชั่วโมงทำงานต่อคนต่อโปรเจกต์ + Export CSV                                                          |
+| `/settings`            | `src/routes/_app/settings.tsx`            | โปรไฟล์และสิทธิ์                                                                                         |
+| `/users`               | `src/routes/_app/users.tsx`               | จัดการผู้ใช้ (admin เท่านั้น)                                                                            |
+| `/settings?tab=access` | `src/routes/_app/settings.tsx`            | จัดการ Departments และ Roles & permissions (admin เท่านั้น; `/access` ยังรองรับเป็น compatibility route) |
+| `/api/auth/*`          | `src/routes/api/auth/$.ts`                | Better Auth handler                                                                                      |
 
 อธิบายวิธีใช้แต่ละหน้าแบบละเอียด (role ไหนทำอะไรได้บ้าง, Log Work ใช้ยังไง, ⌘K ค้นอะไรได้) อยู่ที่ [`docs/user-guide.md`](docs/user-guide.md)
 
@@ -101,9 +102,9 @@ src/
 └── styles.css                 # global theme และ Tailwind styles
 ```
 
-RBAC ถูก enforce ฝั่ง server ในทุก `*.server.ts` ผ่าน `requireSession` / `requireRole` จาก `src/features/auth/auth.server.ts`
+RBAC ถูก enforce ฝั่ง server ในทุก `*.server.ts` ผ่าน `requireSession` / `requirePermission` จาก `src/features/auth/auth.server.ts` โดย role catalog อยู่ใน `access_roles`, ค่า override อยู่ใน `role_permissions` และ permission catalog/default อยู่ที่ `src/lib/rbac.ts`
 
-รายละเอียดเรื่อง routing และ server/client boundary อยู่ที่ [`docs/architecture.md`](docs/architecture.md)
+คู่มือและเอกสารฉบับเต็มทั้งหมดถูกรวบรวมไว้ที่ [**ศูนย์รวมเอกสาร (Documentation Hub)**](docs/README.md) ครอบคลุมทั้ง [`docs/architecture.md`](docs/architecture.md), [`docs/routing-guide.md`](docs/routing-guide.md), [`docs/data-fetching-and-server-guide.md`](docs/data-fetching-and-server-guide.md), [`docs/auth-and-rbac-guide.md`](docs/auth-and-rbac-guide.md), [`docs/database-guide.md`](docs/database-guide.md), [`docs/testing-guide.md`](docs/testing-guide.md) และ [`docs/user-guide.md`](docs/user-guide.md)
 
 ## คำสั่งที่ใช้บ่อย
 

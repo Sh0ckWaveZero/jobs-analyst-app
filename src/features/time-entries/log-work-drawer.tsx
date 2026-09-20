@@ -5,6 +5,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Info, Timer } from 'lucide-react'
+
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { queryKeys } from '@/lib/query-keys'
 import { toast } from 'sonner'
 
 import { formatDuration, parseDuration } from '@/lib/duration'
@@ -154,7 +157,7 @@ export function LogWorkDrawer({
     },
     onSuccess: (_data, values) => {
       setOpen(false)
-      qc.invalidateQueries({ queryKey: ['pm'] })
+      qc.invalidateQueries({ queryKey: queryKeys.root })
       toast.success(
         `บันทึกเวลา ${formatDuration(parseDuration(values.timeSpent) ?? 0)} ให้ ${issue.key} แล้ว`,
       )
@@ -189,14 +192,26 @@ export function LogWorkDrawer({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-          <Timer className="size-3.5" /> Log
-        </Button>
-      </SheetTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Log time"
+            >
+              <Timer className="size-4" />
+            </Button>
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Log time</TooltipContent>
+      </Tooltip>
       <SheetContent
         side="right"
         className="flex w-full flex-col gap-4 overflow-y-auto sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <SheetHeader className="pb-0">
           <SheetTitle>Time tracking</SheetTitle>

@@ -45,10 +45,13 @@ describe('createUserInputSchema', () => {
     ).toBe(true)
   })
 
-  it('role ต้องเป็น admin/manager/member', () => {
+  it('role key รับ custom role ได้แต่ห้ามว่าง', () => {
     expect(
-      createUserInputSchema.safeParse({ ...valid, role: 'superadmin' })
+      createUserInputSchema.safeParse({ ...valid, role: 'custom_project_lead' })
         .success,
+    ).toBe(true)
+    expect(
+      createUserInputSchema.safeParse({ ...valid, role: ' ' }).success,
     ).toBe(false)
   })
 
@@ -71,8 +74,7 @@ describe('updateUserInputSchema', () => {
 
   it('password ถ้าส่งมาต้องยาวอย่างน้อย 8', () => {
     expect(
-      updateUserInputSchema.safeParse({ id: 'u1', password: 'short' })
-        .success,
+      updateUserInputSchema.safeParse({ id: 'u1', password: 'short' }).success,
     ).toBe(false)
   })
 })

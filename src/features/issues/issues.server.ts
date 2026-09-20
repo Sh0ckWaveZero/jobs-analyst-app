@@ -2,9 +2,14 @@ import { aliasedTable, and, desc, eq, sql } from 'drizzle-orm'
 
 import { getDb } from '@/db/client.server'
 import { issues, projects, user } from '@/db/schema'
-import { requireSession } from '@/features/auth/auth.server'
+import {
+  hasPermission,
+  requirePermission,
+  requireSession,
+} from '@/features/auth/auth.server'
 import type { AuthSession } from '@/features/auth/auth.server'
 import { assertProjectActive } from '@/features/projects/projects.server'
+import { Permissions } from '@/lib/rbac'
 import type {
   CreateIssueInput,
   ListIssuesInput,
@@ -37,11 +42,14 @@ async function assertIssueManageAccess(session: AuthSession, issueId: number) {
     )
   }
 
-  const role = session.user.role
-  if (role === 'admin') return
-  if (role === 'manager' && row.ownerId === session.user.id) return
+  if (await hasPermission(session, Permissions.IssuesManageAll)) return
   if (
-    role === 'member' &&
+    (await hasPermission(session, Permissions.IssuesManageOwned)) &&
+    row.ownerId === session.user.id
+  )
+    return
+  if (
+    (await hasPermission(session, Permissions.IssuesManageAssigned)) &&
     (row.reporterId === session.user.id || row.assigneeId === session.user.id)
   )
     return
@@ -118,8 +126,8 @@ async function assertAssigneeAllowed(
   assigneeId: string | null | undefined,
 ) {
   if (!assigneeId) return
-  const role = session.user.role
-  if (role === 'admin' || role === 'manager') return
+  if (await hasPermission(session, Permissions.IssuesAssignAny)) return
+  await requirePermission(session, Permissions.IssuesAssignDepartment)
   if (assigneeId === session.user.id) return
 
   const db = getDb()!
@@ -133,12 +141,12 @@ async function assertAssigneeAllowed(
     throw new Error('Forbidden — join a department to assign others')
   }
 
-  const assignee = await db
+  const assigneeRow = await db
     .select({ departmentId: user.departmentId })
     .from(user)
     .where(eq(user.id, assigneeId))
     .limit(1)
-  if (assignee[0]?.departmentId === myDepartmentId) return
+  if (assigneeRow[0]?.departmentId === myDepartmentId) return
 
   throw new Error(
     'Forbidden — members can only assign themselves or colleagues in the same department',
@@ -150,6 +158,7 @@ const MAX_NUMBER_ATTEMPTS = 5
 
 export async function createIssueRecord(input: CreateIssueInput) {
   const session = await requireSession()
+  await requirePermission(session, Permissions.IssuesCreate)
   const db = getDb()
   if (!db) throw new Error('DATABASE_URL is not configured')
   await assertProjectActive(input.projectId)

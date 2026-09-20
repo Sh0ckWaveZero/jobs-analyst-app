@@ -6,13 +6,22 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { AppSidebar } from './app-sidebar'
 import { SidebarProvider } from '@/components/ui/sidebar'
-import { getArchivedProjects, getProjects } from '@/features/projects/projects.functions'
+import {
+  getArchivedProjects,
+  getProjects,
+} from '@/features/projects/projects.functions'
 
 const state = vi.hoisted(() => ({
   session: {
-    user: { id: 'u1', name: 'Somchai Admin', email: 'admin@pm.local', role: 'admin' },
+    user: {
+      id: 'u1',
+      name: 'Somchai Admin',
+      email: 'admin@pm.local',
+      role: 'admin',
+    },
   },
   pathname: '/',
+  search: {},
   signOut: vi.fn(async () => {}),
   navigate: vi.fn(async () => {}),
 }))
@@ -36,8 +45,13 @@ vi.mock('@tanstack/react-router', () => ({
   useRouterState: ({
     select,
   }: {
-    select: (s: { location: { pathname: string } }) => unknown
-  }) => select({ location: { pathname: state.pathname } }),
+    select: (s: {
+      location: { pathname: string; search: Record<string, unknown> }
+    }) => unknown
+  }) =>
+    select({
+      location: { pathname: state.pathname, search: state.search },
+    }),
 }))
 vi.mock('@/features/auth/auth-client', () => ({
   authClient: {
@@ -65,15 +79,19 @@ function renderSidebar() {
 
 beforeEach(() => {
   vi.mocked(getProjects).mockResolvedValue({
-    projects: [
-      { id: 16, key: 'WEB', name: 'Website Revamp', ownerId: 'u2' },
-    ],
+    projects: [{ id: 16, key: 'WEB', name: 'Website Revamp', ownerId: 'u2' }],
   } as never)
   vi.mocked(getArchivedProjects).mockResolvedValue([] as never)
   state.session = {
-    user: { id: 'u1', name: 'Somchai Admin', email: 'admin@pm.local', role: 'admin' },
+    user: {
+      id: 'u1',
+      name: 'Somchai Admin',
+      email: 'admin@pm.local',
+      role: 'admin',
+    },
   }
   state.pathname = '/'
+  state.search = {}
 })
 
 describe('AppSidebar', () => {
@@ -83,6 +101,7 @@ describe('AppSidebar', () => {
     expect(await screen.findByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Reports')).toBeInTheDocument()
     expect(screen.getByText('Users')).toBeInTheDocument()
+    expect(screen.getByText('Access management')).toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
     expect(screen.getByText('Active Projects')).toBeInTheDocument()
     expect(await screen.findByText('Website Revamp')).toBeInTheDocument()
@@ -98,6 +117,7 @@ describe('AppSidebar', () => {
     renderSidebar()
     await screen.findByText('Dashboard')
     expect(screen.queryByText('Users')).not.toBeInTheDocument()
+    expect(screen.queryByText('Access management')).not.toBeInTheDocument()
     expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 
@@ -107,6 +127,41 @@ describe('AppSidebar', () => {
     const usersLink = await screen.findByText('Users')
     expect(usersLink.closest('a')).toHaveAttribute('data-active', 'true')
     expect(screen.getByText('Dashboard').closest('a')).not.toHaveAttribute(
+      'data-active',
+      'true',
+    )
+  })
+
+  it('กด Settings แล้วไปหน้า settings ได้', () => {
+    renderSidebar()
+
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
+  })
+
+  it('submenu ของ Settings แสดง icons และ mark tab ปัจจุบัน active', () => {
+    state.pathname = '/settings'
+    state.search = { tab: 'security', section: 'departments' }
+    renderSidebar()
+
+    for (const label of [
+      'โปรไฟล์',
+      'ความปลอดภัย',
+      'การแจ้งเตือน',
+      'Access management',
+    ]) {
+      expect(
+        screen.getByRole('link', { name: label }).querySelector('svg'),
+      ).toBeInTheDocument()
+    }
+
+    expect(screen.getByRole('link', { name: 'ความปลอดภัย' })).toHaveAttribute(
+      'data-active',
+      'true',
+    )
+    expect(screen.getByRole('link', { name: 'โปรไฟล์' })).not.toHaveAttribute(
       'data-active',
       'true',
     )
@@ -144,6 +199,21 @@ describe('AppSidebar', () => {
 
     await user.click(screen.getByText('Log out'))
     await waitFor(() => expect(state.signOut).toHaveBeenCalled())
-    await waitFor(() => expect(state.navigate).toHaveBeenCalledWith({ to: '/login' }))
+    await waitFor(() =>
+      expect(state.navigate).toHaveBeenCalledWith({ to: '/login' }),
+    )
+  })
+
+  it('ไม่มี session → ใช้ fallback ชื่อ/อีเมล', async () => {
+    state.session = null as never
+    renderSidebar()
+    expect((await screen.findAllByText('…')).length).toBeGreaterThan(0)
+  })
+
+  it('อยู่ในหน้า /projects/17 → ลิงก์ Projects active', async () => {
+    state.pathname = '/projects/17'
+    renderSidebar()
+    const active = document.querySelector('[data-active="true"]')
+    expect(active).not.toBeNull()
   })
 })

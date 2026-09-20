@@ -13,12 +13,13 @@ TanStack Start ใช้ไฟล์ใน `src/routes` เป็น source ข�
 
 Public routes ปัจจุบัน:
 
-| Public URL  | Route entrypoint               | Feature page                                |
-| ----------- | ------------------------------ | ------------------------------------------- |
-| `/`         | `src/routes/_app/index.tsx`    | `src/features/dashboard/dashboard-page.tsx` |
-| `/jobs`     | `src/routes/_app/jobs.tsx`     | `src/features/jobs/jobs-page.tsx`           |
-| `/reports`  | `src/routes/_app/reports.tsx`  | `src/features/reports/reports-page.tsx`     |
-| `/settings` | `src/routes/_app/settings.tsx` | `src/features/settings/settings-page.tsx`   |
+| Public URL             | Route entrypoint               | Feature page                                                                                                                               |
+| ---------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`                    | `src/routes/_app/index.tsx`    | `src/features/dashboard/dashboard-page.tsx`                                                                                                |
+| `/jobs`                | `src/routes/_app/jobs.tsx`     | `src/features/jobs/jobs-page.tsx`                                                                                                          |
+| `/reports`             | `src/routes/_app/reports.tsx`  | `src/features/reports/reports-page.tsx`                                                                                                    |
+| `/settings`            | `src/routes/_app/settings.tsx` | `src/features/settings/settings-page.tsx`                                                                                                  |
+| `/settings?tab=access` | `src/routes/_app/settings.tsx` | `src/features/settings/access-management-page.tsx` + `rbac.server.ts` (Departments และ Roles & permissions; `/access` compatibility route) |
 
 ### เพิ่ม route ใหม่
 
@@ -28,7 +29,7 @@ Public routes ปัจจุบัน:
 4. รัน `bun run generate-routes`
 5. ตรวจ public URL โดยตรงและตรวจ navigation จากหน้าอื่น
 
-อย่าใส่ DB query, business logic หรือ component ขนาดใหญ่ไว้ใน route entrypoint เพราะ route files ควรทำหน้าที่เชื่อม router กับ feature เท่านั้น
+อย่าใส่ DB query, business logic หรือ component ขนาดใหญ่ไว้ใน route entrypoint เพราะ route files ควรทำหน้าที่เชื่อม router กับ feature เท่านั้น (อ่านคู่มืออย่างละเอียดได้ที่ [`docs/routing-guide.md`](routing-guide.md))
 
 ## Feature และ server boundary
 
@@ -50,6 +51,7 @@ src/features/jobs/
 - `*.schema.ts` ต้องเก็บเฉพาะ schema/type ที่ใช้ร่วมกันได้ ไม่ควร import DB client
 - `*.mock.ts` ต้องไม่มี side effect และใช้เป็น fallback data เท่านั้น
 - `src/components/ui` เก็บ primitive ที่ใช้ซ้ำได้; component ที่ผูกกับหน้าหรือ domain ให้อยู่ใต้ `src/features`
+- อ่านคู่มือ Data Fetching, Server Functions และ API ฉบับละเอียดได้ที่ [`docs/data-fetching-and-server-guide.md`](data-fetching-and-server-guide.md)
 
 ## Data flow ของ Jobs
 

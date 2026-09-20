@@ -9,6 +9,7 @@ import type { QueryClient } from '@tanstack/react-query'
 
 import appCss from '../styles.css?url'
 import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 // queryClient มาจาก router context (สร้างใน src/router.tsx)
 // QueryClientProvider ถูก wrap โดย setupRouterSsrQueryIntegration
@@ -55,10 +56,10 @@ export const Route = createRootRouteWithContext<{
 
 function RootLayout() {
   return (
-    <>
+    <TooltipProvider>
       <Outlet />
       <Toaster />
-    </>
+    </TooltipProvider>
   )
 }
 

@@ -7,11 +7,15 @@ import {
   Briefcase,
   CircleDot,
   FileChartColumn,
+  KeyRound,
   LayoutDashboard,
   Search,
   Settings,
+  ShieldCheck,
+  UserRound,
   UsersRound,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -31,6 +35,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { getProjects } from '@/features/projects/projects.functions'
 import { listIssues } from '@/features/issues/issues.functions'
+import { authClient } from '@/features/auth/auth-client'
+import { queryKeys } from '@/lib/query-keys'
+import { Role } from '@/lib/roles'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -40,21 +47,58 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
+type SettingsSearchItem = {
+  tab: 'profile' | 'security' | 'notifications' | 'access'
+  label: string
+  alias: string
+  icon: LucideIcon
+  adminOnly?: boolean
+}
+
+const SETTINGS_ITEMS: readonly SettingsSearchItem[] = [
+  {
+    tab: 'profile',
+    label: 'โปรไฟล์',
+    alias: 'Profile',
+    icon: UserRound,
+  },
+  {
+    tab: 'security',
+    label: 'ความปลอดภัย',
+    alias: 'Security',
+    icon: KeyRound,
+  },
+  {
+    tab: 'notifications',
+    label: 'การแจ้งเตือน',
+    alias: 'Notifications',
+    icon: Bell,
+  },
+  {
+    tab: 'access',
+    label: 'Access management',
+    alias: 'Departments and roles',
+    icon: ShieldCheck,
+    adminOnly: true,
+  },
+] as const
+
 /** ⌘K / Ctrl+K — ค้นหาโปรเจกต์/issue จริง หรือกระโดดไปหน้าต่างๆ ในแอป */
 export function CommandMenu() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
+  const { data: session } = authClient.useSession()
   const projectsFn = useServerFn(getProjects)
   const listIssuesFn = useServerFn(listIssues)
 
   // ดึงเฉพาะตอนเปิด dialog — ไม่ยิงทุกครั้งที่ header render
   const qProjects = useQuery({
-    queryKey: ['pm', 'projects'],
+    queryKey: queryKeys.projects,
     queryFn: () => projectsFn(),
     enabled: open,
   })
   const qIssues = useQuery({
-    queryKey: ['pm', 'command-menu-issues'],
+    queryKey: queryKeys.commandMenuIssues,
     queryFn: () => listIssuesFn({ data: { limit: 200 } }),
     enabled: open,
   })
@@ -83,8 +127,19 @@ export function CommandMenu() {
     })
   }
 
+  function goToSettings(tab: (typeof SETTINGS_ITEMS)[number]['tab']) {
+    setOpen(false)
+    void navigate({
+      to: '/settings',
+      search: { tab, section: 'departments' },
+    })
+  }
+
   const projects = qProjects.data?.projects ?? []
   const issues = qIssues.data ?? []
+  const settingsItems = SETTINGS_ITEMS.filter(
+    (item) => !item.adminOnly || session?.user.role === Role.Admin,
+  )
 
   return (
     <>
@@ -101,8 +156,16 @@ export function CommandMenu() {
           <span>⌘</span>K
         </kbd>
       </Button>
-      <CommandDialog open={open} onOpenChange={setOpen} title="Search">
-        <CommandInput placeholder="ค้นหา issue, โปรเจกต์ หรือไปที่หน้า…" />
+      <CommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Search"
+        showCloseButton={false}
+      >
+        <CommandInput
+          clearable
+          placeholder="ค้นหา issue, โปรเจกต์ หรือไปที่หน้า…"
+        />
         <CommandList>
           <CommandEmpty>ไม่พบผลลัพธ์</CommandEmpty>
           <CommandGroup heading="Pages">
@@ -111,6 +174,20 @@ export function CommandMenu() {
                 key={item.to}
                 value={`page-${item.label}`}
                 onSelect={() => goToPage(item.to)}
+              >
+                <item.icon />
+                {item.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Settings">
+            {settingsItems.map((item) => (
+              <CommandItem
+                key={item.tab}
+                value={`settings-${item.tab}-${item.label}`}
+                keywords={[item.alias, 'Settings']}
+                onSelect={() => goToSettings(item.tab)}
               >
                 <item.icon />
                 {item.label}

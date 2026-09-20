@@ -2,7 +2,7 @@ import * as React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 
 import { ProjectDetailPage } from './project-detail-page'
 import { getArchivedProjects, getProjects } from './projects.functions'
@@ -100,6 +100,22 @@ const issuesFixture = [
     totalMinutes: 100,
   },
 ]
+
+const noOwnerIssueFixture = {
+  id: 103,
+  key: 'WEB-103',
+  projectId: 16,
+  projectName: 'Website Revamp',
+  title: 'No owner task',
+  status: 'todo',
+  priority: 'low',
+  reporterId: 'u9',
+  assigneeId: null,
+  assigneeName: null,
+  labels: [],
+  dueDate: null,
+  totalMinutes: 0,
+}
 
 function renderPage() {
   const qc = new QueryClient({
@@ -254,7 +270,7 @@ describe('ProjectDetailPage', () => {
     renderPage()
     await screen.findByText('WEB-102')
 
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Edit issue' }))
     expect(await screen.findByText('Edit issue')).toBeInTheDocument()
 
     const title = screen.getByLabelText('Title')
@@ -285,7 +301,12 @@ describe('ProjectDetailPage', () => {
     renderPage()
     await screen.findByText('WEB-102')
 
-    await user.click(screen.getByRole('button', { name: 'delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete issue' }))
+
+    // ต้องยืนยันใน confirm modal ก่อนถึงจะลบจริง
+    await screen.findByRole('alertdialog')
+    expect(deleteIssue).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() =>
       expect(deleteIssue).toHaveBeenCalledWith({ data: { id: 102 } }),
@@ -330,7 +351,10 @@ describe('ProjectDetailPage', () => {
     renderPage()
     await screen.findByText('WEB-102')
 
-    await user.click(screen.getByRole('button', { name: 'delete' }))
+    await user.click(screen.getByRole('button', { name: 'Delete issue' }))
+
+    await screen.findByRole('alertdialog')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
 
     expect(await screen.findByText('ลบ issue ไม่สำเร็จ')).toBeInTheDocument()
   })
@@ -384,7 +408,7 @@ describe('ProjectDetailPage', () => {
     renderPage()
     await screen.findByText('WEB-102')
 
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Edit issue' }))
     await screen.findByText('Edit issue')
 
     await user.clear(screen.getByLabelText(/Labels/))
@@ -409,7 +433,7 @@ describe('ProjectDetailPage', () => {
     expect(
       screen.queryByRole('button', { name: /New issue/ }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit issue' })).not.toBeInTheDocument()
     expect(screen.queryByText('delete')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /Log/ }),
@@ -430,7 +454,7 @@ describe('ProjectDetailPage', () => {
       expect(screen.queryByRole('button', { name: 'Create issue' })).not.toBeInTheDocument(),
     )
 
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: 'Edit issue' }))
     await user.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument(),
@@ -438,5 +462,153 @@ describe('ProjectDetailPage', () => {
 
     expect(createIssue).not.toHaveBeenCalled()
     expect(updateIssue).not.toHaveBeenCalled()
+  })
+
+  it('กด Escape / คลิกนอก drawer → Edit drawer ยังเปิดอยู่ (ป้องกันข้อมูลหาย)', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('button', { name: 'Edit issue' }))
+    expect(await screen.findByText('Edit issue')).toBeInTheDocument()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent.pointerDown(document.body)
+
+    expect(screen.getByText('Edit issue')).toBeInTheDocument()
+  })
+
+  it('issue ไม่มี assignee/due date → แสดง No owner และ —', async () => {
+    vi.mocked(listIssues).mockResolvedValue([
+      ...issuesFixture,
+      noOwnerIssueFixture,
+    ] as never)
+    renderPage()
+    expect(await screen.findByText('WEB-103')).toBeInTheDocument()
+    expect(screen.getByText('No owner')).toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
+  it('create issue ไม่เลือก assignee → ส่ง assigneeId null', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createIssue).mockResolvedValue({} as never)
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('button', { name: /New issue/ }))
+    await user.type(screen.getByLabelText('Title'), 'งานใหม่')
+    await user.click(screen.getByRole('button', { name: 'Create issue' }))
+
+    await waitFor(() => expect(createIssue).toHaveBeenCalled())
+    const payload = vi.mocked(createIssue).mock.calls[0]![0] as {
+      data: { assigneeId: unknown }
+    }
+    expect(payload.data.assigneeId).toBeUndefined()
+  })
+
+  it('create issue fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(createIssue).mockRejectedValue('boom')
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('button', { name: /New issue/ }))
+    await user.type(screen.getByLabelText('Title'), 'งานใหม่')
+    await user.click(screen.getByRole('button', { name: 'Create issue' }))
+
+    expect(
+      (await screen.findAllByText('สร้าง issue ไม่สำเร็จ')).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('update issue fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateIssue).mockRejectedValue('boom')
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('button', { name: 'Edit issue' }))
+    await screen.findByText('Edit issue')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      (await screen.findAllByText('แก้ไข issue ไม่สำเร็จ')).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('delete issue fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(deleteIssue).mockRejectedValue('boom')
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('button', { name: 'Delete issue' }))
+    await screen.findByRole('alertdialog')
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(
+      (await screen.findAllByText('ลบ issue ไม่สำเร็จ')).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('edit issue ที่ไม่มี assignee/due date → prefill none/ว่าง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateIssue).mockResolvedValue({} as never)
+    vi.mocked(listIssues).mockResolvedValue([
+      ...issuesFixture,
+      noOwnerIssueFixture,
+    ] as never)
+    renderPage()
+    await screen.findByText('WEB-103')
+
+    const row = screen.getByText('WEB-103').closest('tr') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Edit issue' }))
+    await screen.findByText('Edit issue')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(updateIssue).toHaveBeenCalled())
+    const payload = vi.mocked(updateIssue).mock.calls[0]![0] as {
+      data: { assigneeId: unknown; dueDate: unknown }
+    }
+    expect(payload.data.assigneeId).toBeNull()
+    expect(payload.data.dueDate).toBeNull()
+  })
+
+  it('issues กำลังโหลด → skeleton แถวในตาราง', async () => {
+    vi.mocked(listIssues).mockReturnValue(new Promise(() => {}) as never)
+    renderPage()
+    expect(document.querySelectorAll('td[colspan="8"]').length).toBeGreaterThan(0)
+  })
+
+  it('ตัวกรอง: ค้นหา → เฉพาะ issue ที่ตรง + ล้างตัวกรอง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listIssues).mockResolvedValue([
+      ...issuesFixture,
+      noOwnerIssueFixture,
+    ] as never)
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.type(screen.getByPlaceholderText('ค้นหา issue…'), 'no owner')
+    expect(screen.queryByText('WEB-102')).not.toBeInTheDocument()
+    expect(screen.getByText('WEB-103')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'ล้างตัวกรอง' }))
+    expect(screen.getByText('WEB-102')).toBeInTheDocument()
+  })
+
+  it('ตัวกรองสถานะ: Todo → เฉพาะ WEB-103', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listIssues).mockResolvedValue([
+      ...issuesFixture,
+      noOwnerIssueFixture,
+    ] as never)
+    renderPage()
+    await screen.findByText('WEB-102')
+
+    await user.click(screen.getByRole('combobox', { name: 'กรองสถานะ' }))
+    await user.click(await screen.findByRole('option', { name: 'Todo' }))
+    expect(screen.getByText('WEB-103')).toBeInTheDocument()
+    expect(screen.queryByText('WEB-102')).not.toBeInTheDocument()
   })
 })

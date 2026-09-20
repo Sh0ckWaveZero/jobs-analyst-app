@@ -5,11 +5,14 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+
+import { Role } from '@/lib/roles'
 
 // ── Better Auth tables (โครงสร้างตาม docs better-auth v1.7.5) ──
 
@@ -25,15 +28,71 @@ export const departments = pgTable('departments', {
     .defaultNow(),
 })
 
+/** Role catalog — built-in roles และ custom roles ที่ admin สร้างเอง */
+export const accessRoles = pgTable('access_roles', {
+  key: text('key').primaryKey(),
+  label: text('label').notNull(),
+  description: text('description').notNull().default(''),
+  isSystem: boolean('is_system').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+/** Permission catalog — system capabilities และ custom permissions ที่ admin เพิ่มเอง */
+export const permissions = pgTable('permissions', {
+  key: text('key').primaryKey(),
+  permissionGroup: text('group').notNull(),
+  label: text('label').notNull(),
+  description: text('description').notNull().default(''),
+  isSystem: boolean('is_system').notNull().default(false),
+  protectedForAdmin: boolean('protected_for_admin').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+/** Permission override ต่อ role — ถ้าไม่มี row จะใช้ค่า default จาก lib/rbac */
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    role: text('role')
+      .notNull()
+      .references(() => accessRoles.key, { onDelete: 'cascade' }),
+    permission: text('permission')
+      .notNull()
+      .references(() => permissions.key, { onDelete: 'cascade' }),
+    enabled: boolean('enabled').notNull().default(true),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.role, table.permission] })],
+)
+
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
-  role: text('role', { enum: ['admin', 'manager', 'member'] })
+  username: text('username'),
+  phoneNumber: text('phone_number'),
+  status: text('status', {
+    enum: ['active', 'inactive', 'invited', 'suspended'],
+  })
     .notNull()
-    .default('member'),
+    .default('active'),
+  role: text('role')
+    .notNull()
+    .default(Role.Member)
+    .references(() => accessRoles.key),
   departmentId: integer('department_id').references(() => departments.id, {
     onDelete: 'set null',
   }),
@@ -210,6 +269,9 @@ export type IssueStatus = NonNullable<Issue['status']>
 export type IssuePriority = NonNullable<Issue['priority']>
 
 export type Department = typeof departments.$inferSelect
+export type Permission = typeof permissions.$inferSelect
+export type RolePermission = typeof rolePermissions.$inferSelect
+export type AccessRole = typeof accessRoles.$inferSelect
 export type User = typeof user.$inferSelect
 export type Project = typeof projects.$inferSelect
 export type NewProject = typeof projects.$inferInsert

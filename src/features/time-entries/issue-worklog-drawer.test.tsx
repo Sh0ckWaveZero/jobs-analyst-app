@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 
 import { IssueWorklogDrawer } from './issue-worklog-drawer'
 import {
@@ -18,6 +18,11 @@ const sessionRef = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-start', () => ({ useServerFn: (fn: unknown) => fn }))
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+}))
 vi.mock('@/features/auth/auth-client', () => ({
   authClient: { useSession: () => ({ data: sessionRef.current }) },
 }))
@@ -27,7 +32,12 @@ vi.mock('./time-entries.functions', () => ({
   deleteEntry: vi.fn(),
 }))
 
-const issue = { id: 102, key: 'WEB-102', title: 'Finalize design tokens' }
+const issue = {
+  id: 102,
+  key: 'WEB-102',
+  title: 'Finalize design tokens',
+  projectId: 16,
+}
 
 // u8 = เจ้าของรายการแรก, u2 = คนอื่น
 const entriesFixture = [
@@ -148,8 +158,12 @@ describe('IssueWorklogDrawer', () => {
       'div[class*="border"]',
     ) as HTMLElement
 
-    expect(within(myEntry).getByText('Edit')).toBeInTheDocument()
-    expect(within(otherEntry).queryByText('Edit')).not.toBeInTheDocument()
+    expect(
+      within(myEntry).getByRole('button', { name: 'Edit entry' }),
+    ).toBeInTheDocument()
+    expect(
+      within(otherEntry).queryByRole('button', { name: 'Edit entry' }),
+    ).not.toBeInTheDocument()
   })
 
   it('admin เห็นปุ่มแก้/ลบทุกรายการ', async () => {
@@ -160,8 +174,12 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    expect(await screen.findAllByText('Edit')).toHaveLength(2)
-    expect(await screen.findAllByText('delete')).toHaveLength(2)
+    expect(
+      await screen.findAllByRole('button', { name: 'Edit entry' }),
+    ).toHaveLength(2)
+    expect(
+      await screen.findAllByRole('button', { name: 'Delete entry' }),
+    ).toHaveLength(2)
   })
 
   it('แก้ไขรายการ: เปลี่ยนเป็น 30m → updateEntry + toast + ออกจากโหมดแก้', async () => {
@@ -170,7 +188,9 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('Edit'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit entry' }),
+    )
     const timeInput = await screen.findByLabelText('Time spent')
     expect(timeInput).toHaveValue('1h 45m') // prefill จากรายการ
 
@@ -198,7 +218,9 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('Edit'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit entry' }),
+    )
     const timeInput = await screen.findByLabelText('Time spent')
     await user.clear(timeInput)
     await user.type(timeInput, 'xyz')
@@ -216,7 +238,9 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('Edit'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit entry' }),
+    )
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('แก้ไขรายการไม่สำเร็จ')).toBeInTheDocument()
@@ -228,7 +252,9 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('Edit'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit entry' }),
+    )
     const timeInput = await screen.findByLabelText('Time spent')
     await user.clear(timeInput)
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -242,7 +268,9 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('delete'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete entry' }),
+    )
 
     await waitFor(() =>
       expect(deleteEntry).toHaveBeenCalledWith({ data: { id: 900 } }),
@@ -256,7 +284,9 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('delete'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete entry' }),
+    )
 
     expect(await screen.findByText('ลบรายการไม่สำเร็จ')).toBeInTheDocument()
   })
@@ -266,12 +296,89 @@ describe('IssueWorklogDrawer', () => {
     renderDrawer()
     await user.click(screen.getByText('2h 45m'))
 
-    await user.click(await screen.findByText('Edit'))
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit entry' }),
+    )
     await user.click(await screen.findByRole('button', { name: 'Cancel' }))
 
     expect(
       await screen.findByText('1h 45m'),
     ).toBeInTheDocument()
     expect(updateEntry).not.toHaveBeenCalled()
+  })
+
+  it('กด Escape / คลิกนอก drawer → worklog drawer ยังเปิดอยู่', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await user.click(await screen.findByText('2h 45m'))
+    expect(await screen.findByText('Work log')).toBeInTheDocument()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent.pointerDown(document.body)
+
+    expect(screen.getByText('Work log')).toBeInTheDocument()
+  })
+
+  it('แก้ไข fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateEntry).mockRejectedValue('boom')
+    renderDrawer()
+    await user.click(await screen.findByText('2h 45m'))
+
+    await user.click(await screen.findByRole('button', { name: 'Edit entry' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(
+      (await screen.findAllByText('แก้ไขรายการไม่สำเร็จ', {}, { timeout: 3000 }))
+        .length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('ลบ fail ด้วย non-Error → toast แสดง', async () => {
+    const user = userEvent.setup()
+    vi.mocked(deleteEntry).mockRejectedValue('boom')
+    renderDrawer()
+    await user.click(await screen.findByText('2h 45m'))
+
+    await user.click(await screen.findByRole('button', { name: 'Delete entry' }))
+
+    expect(
+      (await screen.findAllByText('ลบรายการไม่สำเร็จ', {}, { timeout: 3000 }))
+        .length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('มีมากกว่า 5 รายการ → แสดงลิงก์ View all', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listIssueEntries).mockResolvedValue([
+      ...entriesFixture,
+      ...entriesFixture.map((e, i) => ({ ...e, id: 900 + i })),
+      ...entriesFixture.map((e, i) => ({ ...e, id: 950 + i, userName: null })),
+      ...entriesFixture.map((e, i) => ({ ...e, id: 980 + i })),
+    ] as never)
+    renderDrawer()
+    await user.click(await screen.findByText('2h 45m'))
+
+    expect(
+      await screen.findByText(/View all \(\d+ entries\)/),
+    ).toBeInTheDocument()
+  })
+
+  it('ปิด drawer ตอนกำลังแก้ไข → ออกจากโหมดแก้ไข', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await user.click(await screen.findByText('2h 45m'))
+
+    await user.click(await screen.findByRole('button', { name: 'Edit entry' }))
+    await screen.findByLabelText('Time spent')
+
+    const closeBtn = Array.from(
+      document.querySelectorAll('[data-slot="sheet-content"] button'),
+    ).find((b) => b.textContent.includes('Close')) as HTMLButtonElement
+    await user.click(closeBtn)
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Time spent')).not.toBeInTheDocument(),
+    )
   })
 })

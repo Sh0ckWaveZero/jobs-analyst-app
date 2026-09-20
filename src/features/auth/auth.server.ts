@@ -1,17 +1,23 @@
 import { betterAuth } from 'better-auth/minimal'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { and, eq } from 'drizzle-orm'
 import { getRequestHeaders } from '@tanstack/react-start/server'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 
 import { getDb } from '@/db/client.server'
 import * as schema from '@/db/schema'
-import type { Role } from '@/db/schema'
+import { rolePermissions } from '@/db/schema'
+import { defaultHasPermission } from '@/lib/rbac'
+import type { PermissionKey } from '@/lib/rbac'
+import { Role } from '@/lib/roles'
+import type { UserRole } from '@/lib/roles'
 
 const db = getDb()
 if (!db) {
   // auth ต้องใช้ DB เสมอ (session/credential เก็บใน Postgres)
   throw new Error('DATABASE_URL is not set — better-auth requires a database')
 }
+const authDb = db
 
 // dev เท่านั้น — ครอบคลุม localhost + LAN IP ทั่วไป เพื่อทดสอบข้ามเครื่องได้
 const DEV_ALLOWED_HOSTS = [
@@ -32,7 +38,8 @@ const DEV_ALLOWED_HOSTS = [
  * อากาศเป็นระยะ ใช้ dynamic baseURL + allowedHosts แทน ปลอดภัยกว่า (มี allowlist)
  * และยังรองรับ localhost คู่กับ IP วง LAN เหมือนเดิม
  */
-function resolveBaseURL(): string | { allowedHosts: string[]; fallback: string } {
+function resolveBaseURL():
+  string | { allowedHosts: string[]; fallback: string } {
   const raw = process.env.BETTER_AUTH_URL
   if (raw) {
     try {
@@ -60,9 +67,9 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       role: {
-        type: ['admin', 'manager', 'member'],
+        type: 'string',
         required: false,
-        defaultValue: 'member',
+        defaultValue: Role.Member,
         // ห้ามผู้ใช้ตั้ง role เองตอน signup — เปลี่ยนได้ทาง admin/seed เท่านั้น
         input: false,
       },
@@ -82,7 +89,23 @@ export type AuthSession = typeof auth.$Infer.Session
 /** ดึง session จาก request ปัจจุบัน (ใช้ใน *.server.ts เท่านั้น) */
 export async function getAuthSession(): Promise<AuthSession | null> {
   const headers = getRequestHeaders()
-  return auth.api.getSession({ headers })
+  const session = await auth.api.getSession({ headers })
+  if (!session) return null
+
+  const [currentUser] = await authDb
+    .select({ status: schema.user.status })
+    .from(schema.user)
+    .where(eq(schema.user.id, session.user.id))
+    .limit(1)
+
+  if (
+    currentUser?.status === 'inactive' ||
+    currentUser?.status === 'suspended'
+  ) {
+    return null
+  }
+
+  return session
 }
 
 export async function requireSession(): Promise<AuthSession> {
@@ -94,10 +117,44 @@ export async function requireSession(): Promise<AuthSession> {
 /** บังคับบทบาท — ผู้ใช้ต้องมี role ในรายการที่อนุญาต */
 export function requireRole(
   session: AuthSession,
-  roles: readonly Role[],
+  roles: readonly UserRole[],
 ): void {
   const role = session.user.role
-  if (!role || !roles.includes(role)) {
+  if (!role || !roles.includes(role as UserRole)) {
     throw new Error(`Forbidden — requires role: ${roles.join(' or ')}`)
+  }
+}
+
+/** ตรวจ permission จาก override ใน DB และ fallback เป็น built-in role defaults */
+export async function hasPermission(
+  session: AuthSession,
+  permission: PermissionKey,
+): Promise<boolean> {
+  const role = session.user.role
+  if (!role) return false
+
+  const permissionDb = getDb()
+  if (!permissionDb) return defaultHasPermission(role, permission)
+
+  const [override] = await permissionDb
+    .select({ enabled: rolePermissions.enabled })
+    .from(rolePermissions)
+    .where(
+      and(
+        eq(rolePermissions.role, role),
+        eq(rolePermissions.permission, permission),
+      ),
+    )
+    .limit(1)
+
+  return override?.enabled ?? defaultHasPermission(role, permission)
+}
+
+export async function requirePermission(
+  session: AuthSession,
+  permission: PermissionKey,
+): Promise<void> {
+  if (!(await hasPermission(session, permission))) {
+    throw new Error(`Forbidden — missing permission: ${permission}`)
   }
 }

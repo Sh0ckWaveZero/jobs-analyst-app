@@ -23,4 +23,28 @@ describe('Toaster', () => {
     )
     expect(screen.getByText('กรุณาลองใหม่')).toBeInTheDocument()
   })
+
+  it('success toast → ไอคอนสีเขียว (emerald)', async () => {
+    render(<Toaster />)
+    toast.success('บันทึกการแก้ไข issue แล้ว')
+
+    await waitFor(() =>
+      expect(screen.getByText('บันทึกการแก้ไข issue แล้ว')).toBeInTheDocument(),
+    )
+    expect(
+      document.querySelector('[data-sonner-toast] svg.text-emerald-600'),
+    ).toBeInTheDocument()
+  })
+
+  it('error toast → ไอคอนสีแดง (destructive)', async () => {
+    render(<Toaster />)
+    toast.error('ลบ issue ไม่สำเร็จ')
+
+    await waitFor(() =>
+      expect(screen.getByText('ลบ issue ไม่สำเร็จ')).toBeInTheDocument(),
+    )
+    expect(
+      document.querySelector('[data-sonner-toast] svg.text-destructive'),
+    ).toBeInTheDocument()
+  })
 })

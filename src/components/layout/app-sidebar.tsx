@@ -1,21 +1,22 @@
 import { useState } from 'react'
-import {
-  Link,
-  useNavigate,
-  useRouterState,
-} from '@tanstack/react-router'
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
+import { queryKeys } from '@/lib/query-keys'
+import { Role } from '@/lib/roles'
 import {
   Activity,
   Archive,
+  Bell,
   Briefcase,
   ChevronRight,
   ChevronsUpDown,
   FileChartColumn,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Settings,
+  ShieldCheck,
   UserRound,
   UsersRound,
 } from 'lucide-react'
@@ -51,27 +52,43 @@ import {
   getProjects,
 } from '@/features/projects/projects.functions'
 
-const navGroups = [
-  {
-    label: 'Overview',
-    items: [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/reports', label: 'Reports', icon: FileChartColumn },
-    ],
-  },
-  {
-    label: 'Workspace',
-    items: [
-      { to: '/users', label: 'Users', icon: UsersRound, adminOnly: true },
-      { to: '/settings', label: 'Settings', icon: Settings, adminOnly: false },
-    ],
-  },
-] as const
+type NavItem = {
+  to: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  adminOnly?: boolean
+}
+
+const overviewGroup: { label: string; items: NavItem[] } = {
+  label: 'Overview',
+  items: [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/reports', label: 'Reports', icon: FileChartColumn },
+  ],
+}
+
+const workspaceGroup: { label: string; items: NavItem[] } = {
+  label: 'Workspace',
+  items: [{ to: '/users', label: 'Users', icon: UsersRound, adminOnly: true }],
+}
 
 export function AppSidebar() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const { pathname, search } = useRouterState({
+    select: (s) => ({
+      pathname: s.location.pathname,
+      search: s.location.search,
+    }),
+  })
   const { data: session } = authClient.useSession()
-  const isAdmin = session?.user.role === 'admin'
+  const isAdmin = session?.user.role === Role.Admin
+  const settingsTab =
+    pathname.startsWith('/access') || search.tab === 'access'
+      ? 'access'
+      : search.tab === 'profile' ||
+          search.tab === 'security' ||
+          search.tab === 'notifications'
+        ? search.tab
+        : undefined
 
   const name = session?.user.name ?? '…'
   const email = session?.user.email ?? ''
@@ -103,11 +120,11 @@ export function AppSidebar() {
       <SidebarContent className="gap-0 px-2 py-3">
         <SidebarGroup className="px-1 py-2">
           <SidebarGroupLabel className="h-7 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/45">
-            {navGroups[0].label}
+            {overviewGroup.label}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navGroups[0].items.map((item) => (
+              {overviewGroup.items.map((item) => (
                 <NavItemButton
                   key={item.to}
                   to={item.to}
@@ -122,13 +139,19 @@ export function AppSidebar() {
 
         <ProjectsGroup pathname={pathname} />
 
+        <SettingsGroup
+          pathname={pathname}
+          activeTab={settingsTab}
+          isAdmin={isAdmin}
+        />
+
         <SidebarGroup className="px-1 py-2">
           <SidebarGroupLabel className="h-7 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/45">
-            {navGroups[1].label}
+            {workspaceGroup.label}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navGroups[1].items
+              {workspaceGroup.items
                 .filter((item) => !item.adminOnly || isAdmin)
                 .map((item) => (
                   <NavItemButton
@@ -146,7 +169,12 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border/70 px-2 py-3">
         <NavUser
-          user={{ name, email, initials, role: session?.user.role ?? 'member' }}
+          user={{
+            name,
+            email,
+            initials,
+            role: session?.user.role ?? Role.Member,
+          }}
         />
       </SidebarFooter>
     </Sidebar>
@@ -190,15 +218,116 @@ function NavItemButton({
 }
 
 /** กลุ่ม Projects: Active Projects (ยุบ/ขยายรายชื่อโปรเจกต์) + Archived */
+/** กลุ่ม Settings: โปรไฟล์ / ความปลอดภัย / การแจ้งเตือน (ยุบ/ขยายได้) */
+function SettingsGroup({
+  pathname,
+  activeTab,
+  isAdmin,
+}: {
+  pathname: string
+  activeTab?: 'profile' | 'security' | 'notifications' | 'access'
+  isAdmin: boolean
+}) {
+  const [open, setOpen] = useState(true)
+  const subs: Array<{
+    to: '/settings'
+    label: string
+    tab: 'profile' | 'security' | 'notifications' | 'access'
+    icon: typeof UserRound
+  }> = [
+    { to: '/settings', label: 'โปรไฟล์', tab: 'profile', icon: UserRound },
+    {
+      to: '/settings',
+      label: 'ความปลอดภัย',
+      tab: 'security',
+      icon: KeyRound,
+    },
+    {
+      to: '/settings',
+      label: 'การแจ้งเตือน',
+      tab: 'notifications',
+      icon: Bell,
+    },
+  ]
+  if (isAdmin) {
+    subs.push({
+      to: '/settings',
+      label: 'Access management',
+      tab: 'access',
+      icon: ShieldCheck,
+    })
+  }
+
+  const settingsActive =
+    pathname.startsWith('/settings') || pathname.startsWith('/access')
+
+  return (
+    <SidebarGroup className="px-1 py-2">
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Settings"
+              isActive={settingsActive}
+              className="h-9 rounded-lg px-2.5 text-[13px]"
+            >
+              <Link
+                to="/settings"
+                search={{ tab: 'profile', section: 'departments' }}
+              >
+                <Settings />
+                <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+            <SidebarMenuAction
+              onClick={() => setOpen((v) => !v)}
+              className="size-7"
+            >
+              <ChevronRight
+                className={`transition-transform ${open ? 'rotate-90' : ''}`}
+              />
+            </SidebarMenuAction>
+            {open && (
+              <SidebarMenuSub>
+                {subs.map(({ icon: Icon, ...s }) => (
+                  <SidebarMenuSubItem key={s.label}>
+                    <SidebarMenuSubButton
+                      asChild
+                      isActive={activeTab === s.tab}
+                    >
+                      <Link
+                        to={s.to}
+                        search={
+                          s.tab === 'access'
+                            ? { tab: 'access', section: 'departments' }
+                            : { tab: s.tab, section: 'departments' }
+                        }
+                      >
+                        <Icon />
+                        {s.label}
+                      </Link>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                ))}
+              </SidebarMenuSub>
+            )}
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  )
+}
+
 function ProjectsGroup({ pathname }: { pathname: string }) {
   const projectsFn = useServerFn(getProjects)
   const archivedFn = useServerFn(getArchivedProjects)
   const qProjects = useQuery({
-    queryKey: ['pm', 'projects'],
+    queryKey: queryKeys.projects,
     queryFn: () => projectsFn(),
   })
   const qArchived = useQuery({
-    queryKey: ['pm', 'projects-archived'],
+    queryKey: queryKeys.projectsArchived,
     queryFn: () => archivedFn(),
   })
 
@@ -358,7 +487,10 @@ function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/settings">
+              <Link
+                to="/settings"
+                search={{ tab: 'profile', section: 'departments' }}
+              >
                 <UserRound />
                 Profile
                 <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
