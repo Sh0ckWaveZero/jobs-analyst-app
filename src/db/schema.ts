@@ -8,6 +8,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 
 // ── Better Auth tables (โครงสร้างตาม docs better-auth v1.7.5) ──
@@ -161,7 +162,10 @@ export const issues = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index('issues_project_idx').on(t.projectId, t.number)],
+  (t) => [
+    // กัน race condition ตอนสร้าง issue พร้อมกัน — DB ปฏิเสธเลขซ้ำแทนที่จะเงียบๆ ยอมให้ผ่าน
+    uniqueIndex('issues_project_number_unique').on(t.projectId, t.number),
+  ],
 )
 
 export const timeEntries = pgTable(
