@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 
@@ -12,6 +13,11 @@ const ROLE_LABELS: Record<string, string> = {
   member: 'Member — บันทึกชั่วโมงและดูข้อมูลของตัวเอง',
 }
 
+// format วันที่เป็น helper ระดับโมดูล — กันค่าต่าง timezone SSR/client
+function formatJoinedDate(date: Date | string) {
+  return new Date(date).toLocaleDateString('th-TH', { dateStyle: 'long' })
+}
+
 export function SettingsPage() {
   const { data: session, isPending } = authClient.useSession()
   const departments = useServerFn(listDepartments)
@@ -20,6 +26,10 @@ export function SettingsPage() {
     queryFn: () => departments(),
   })
   const u = session?.user
+  const joinedText = useMemo(
+    () => (u ? formatJoinedDate(u.createdAt) : ''),
+    [u],
+  )
   const departmentName = qDepartments.data?.find(
     (d) => String(d.id) === String(u?.departmentId ?? ''),
   )?.name
@@ -65,10 +75,7 @@ export function SettingsPage() {
                 แผนก: {departmentName ?? 'ไม่สังกัดแผนก'}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                เข้าร่วมเมื่อ{' '}
-                {new Date(u.createdAt).toLocaleDateString('th-TH', {
-                  dateStyle: 'long',
-                })}
+                เข้าร่วมเมื่อ {joinedText}
               </p>
             </div>
           </div>

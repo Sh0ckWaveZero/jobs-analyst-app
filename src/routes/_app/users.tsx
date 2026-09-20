@@ -8,21 +8,31 @@ import {
 } from '@/features/users/users.functions'
 
 export const Route = createFileRoute('/_app/users')({
-  // prefetch เฉพาะ admin — คนอื่นเห็น Forbidden หน้า client-side อยู่แล้ว
+  // prefetch ขนาน: session วิ่งพร้อมกับข้อมูล —
+  // users เฉพาะ admin (ต้องรู้ role จาก session ก่อน), departments ได้ทุก role
   loader: async ({ context: { queryClient } }) => {
-    const session = await getSession()
-    if (session?.user.role !== 'admin') return
-
-    await Promise.all([
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'users'],
-        queryFn: () => listUsers(),
-      }),
-      queryClient.ensureQueryData({
-        queryKey: ['pm', 'departments'],
-        queryFn: () => listDepartments(),
-      }),
+    const sessionPromise = getSession()
+    const [session] = await Promise.all([
+      sessionPromise,
+      sessionPromise.then((s): Promise<unknown> =>
+        s?.user.role === 'admin'
+          ? Promise.all([
+              queryClient.ensureQueryData({
+                queryKey: ['pm', 'users'],
+                queryFn: () => listUsers(),
+              }),
+              queryClient.ensureQueryData({
+                queryKey: ['pm', 'departments'],
+                queryFn: () => listDepartments(),
+              }),
+            ])
+          : queryClient.ensureQueryData({
+              queryKey: ['pm', 'departments'],
+              queryFn: () => listDepartments(),
+            }),
+      ),
     ])
+    return session
   },
   component: UsersPage,
 })

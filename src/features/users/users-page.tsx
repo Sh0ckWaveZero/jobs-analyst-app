@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { useForm } from 'react-hook-form'
@@ -49,6 +49,11 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const ROLES: Role[] = ['admin', 'manager', 'member']
+
+// format วันที่เป็น helper ระดับโมดูล — กันค่าต่าง timezone SSR/client
+function formatJoinedDate(date: Date) {
+  return date.toLocaleDateString()
+}
 
 const newUserFormSchema = createUserInputSchema.extend({
   // ฟอร์มรับ department เป็น string ('' = ไม่สังกัด) แล้วแปลงตอน submit
@@ -337,6 +342,7 @@ function UserRow({
 }) {
   const qc = useQueryClient()
   const update = useServerFn(updateUser)
+  const joinedText = useMemo(() => formatJoinedDate(u.createdAt), [u.createdAt])
 
   const mut = useMutation({
     mutationFn: (patch: { role?: Role; departmentId?: number | null }) =>
@@ -395,7 +401,7 @@ function UserRow({
         </Select>
       </td>
       <td className="px-4 py-3 tabular-nums text-muted-foreground">
-        {new Date(u.createdAt).toLocaleDateString()}
+        {joinedText}
       </td>
     </tr>
   )

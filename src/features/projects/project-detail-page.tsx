@@ -27,6 +27,13 @@ import {
 import type { IssueRow } from '@/features/issues/issues.server'
 import { LogWorkDrawer } from '@/features/time-entries/log-work-drawer'
 import { IssueWorklogDrawer } from '@/features/time-entries/issue-worklog-drawer'
+import {
+  IssueAssigneeField,
+  IssueDueDateField,
+  IssueLabelsField,
+  IssuePriorityField,
+  IssueTitleField,
+} from './issue-form-fields'
 
 import { authClient } from '@/features/auth/auth-client'
 import {
@@ -46,7 +53,6 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { IssueStatus } from '@/db/schema'
 
@@ -377,91 +383,29 @@ function NewIssueForm({ projectId }: { projectId: number }) {
         <FormField
           control={form.control}
           name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Title</FormLabel>
-              <FormControl>
-                <Input placeholder="What needs to be done?" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssueTitleField field={field} />}
         />
         <FormField
           control={form.control}
           name="priority"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Priority</FormLabel>
-              <Select value={field.value} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger className="w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="low">low</SelectItem>
-                  <SelectItem value="medium">medium</SelectItem>
-                  <SelectItem value="high">high</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssuePriorityField field={field} />}
         />
         <FormField
           control={form.control}
           name="assigneeId"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Assignee</FormLabel>
-              <Select
-                value={field.value || 'none'}
-                onValueChange={field.onChange}
-              >
-                <FormControl>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Unassigned" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {(qAssignable.data ?? []).map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
+            <IssueAssigneeField field={field} users={qAssignable.data ?? []} />
           )}
         />
         <FormField
           control={form.control}
           name="dueDate"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Due date</FormLabel>
-              <FormControl>
-                <Input type="date" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssueDueDateField field={field} />}
         />
         <FormField
           control={form.control}
           name="labels"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Labels (comma)</FormLabel>
-              <FormControl>
-                <Input placeholder="frontend, api" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => <IssueLabelsField field={field} />}
         />
             {form.formState.errors.root && (
               <p className="text-sm text-destructive">
@@ -595,15 +539,7 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
             <FormField
               control={form.control}
               name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="What needs to be done?" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssueTitleField field={field} />}
             />
             <FormField
               control={form.control}
@@ -634,78 +570,24 @@ function EditIssueDrawer({ issue }: { issue: IssueRow }) {
             <FormField
               control={form.control}
               name="priority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Priority</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="low">low</SelectItem>
-                      <SelectItem value="medium">medium</SelectItem>
-                      <SelectItem value="high">high</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssuePriorityField field={field} />}
             />
             <FormField
               control={form.control}
               name="assigneeId"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Assignee</FormLabel>
-                  <Select
-                    value={field.value || 'none'}
-                    onValueChange={field.onChange}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Unassigned" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {(qAssignable.data ?? []).map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                <IssueAssigneeField field={field} users={qAssignable.data ?? []} />
               )}
             />
             <FormField
               control={form.control}
               name="dueDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Due date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssueDueDateField field={field} />}
             />
             <FormField
               control={form.control}
               name="labels"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Labels (comma)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="frontend, api" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => <IssueLabelsField field={field} />}
             />
             {form.formState.errors.root && (
               <p className="text-sm text-destructive">

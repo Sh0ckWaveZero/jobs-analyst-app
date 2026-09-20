@@ -205,20 +205,22 @@ export async function getDashboardCountsRecord(session: AuthSession) {
   if (!db) throw new Error('DATABASE_URL is not configured')
   const uid = session.user.id
 
-  const [created] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(issues)
-    .where(eq(issues.reporterId, uid))
-  const [assigned] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(issues)
-    .where(eq(issues.assigneeId, uid))
-
-  const statusRows = await db
-    .select({ status: issues.status, count: sql<number>`count(*)::int` })
-    .from(issues)
-    .where(eq(issues.assigneeId, uid))
-    .groupBy(issues.status)
+  // สาม query อิสระต่อกัน — ยิงขนาน
+  const [[created], [assigned], statusRows] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(issues)
+      .where(eq(issues.reporterId, uid)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(issues)
+      .where(eq(issues.assigneeId, uid)),
+    db
+      .select({ status: issues.status, count: sql<number>`count(*)::int` })
+      .from(issues)
+      .where(eq(issues.assigneeId, uid))
+      .groupBy(issues.status),
+  ])
 
   const counts = {
     backlog: 0,
