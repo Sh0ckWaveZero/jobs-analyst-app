@@ -31,6 +31,15 @@ function applyTheme(theme: Theme) {
   localStorage.setItem(THEME_STORAGE_KEY, theme)
 }
 
+function applyThemeWithTransition(theme: Theme) {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (typeof document.startViewTransition === 'function' && !reduceMotion) {
+    document.startViewTransition(() => applyTheme(theme))
+    return
+  }
+  applyTheme(theme)
+}
+
 export function ThemeToggle({ className }: { className?: string }) {
   const [theme, setTheme] = React.useState<Theme>('system')
 
@@ -50,7 +59,7 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   function select(next: Theme) {
     setTheme(next)
-    applyTheme(next)
+    applyThemeWithTransition(next)
   }
 
   return (
