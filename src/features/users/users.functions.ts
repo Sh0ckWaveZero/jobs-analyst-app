@@ -4,14 +4,18 @@ import { requireSession } from '@/features/auth/auth.server'
 import {
   createDepartmentRecord,
   createUserRecord,
+  deleteDepartmentRecord,
   getAssignableUsersRecord,
   listDepartmentsRecord,
   listUsersRecord,
+  updateDepartmentRecord,
   updateUserRecord,
 } from './users.server'
 import {
   createDepartmentInputSchema,
   createUserInputSchema,
+  deleteDepartmentInputSchema,
+  updateDepartmentInputSchema,
   updateUserInputSchema,
 } from './users.schema'
 
@@ -34,6 +38,14 @@ export const listDepartments = createServerFn({ method: 'GET' }).handler(() =>
 export const createDepartment = createServerFn({ method: 'POST' })
   .validator(createDepartmentInputSchema)
   .handler(({ data }) => createDepartmentRecord(data))
+
+export const updateDepartment = createServerFn({ method: 'POST' })
+  .validator(updateDepartmentInputSchema)
+  .handler(({ data }) => updateDepartmentRecord(data))
+
+export const deleteDepartment = createServerFn({ method: 'POST' })
+  .validator(deleteDepartmentInputSchema)
+  .handler(({ data }) => deleteDepartmentRecord(data))
 
 export const getAssignableUsers = createServerFn({ method: 'GET' }).handler(
   async () => {
