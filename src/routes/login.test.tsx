@@ -148,4 +148,31 @@ describe('login beforeLoad', () => {
     vi.mocked(getSession).mockResolvedValue(null)
     await expect(beforeLoad()).resolves.toBeUndefined()
   })
+
+  it('สมัครสมาชิก fail → แสดง message จาก server', async () => {
+    const user = userEvent.setup()
+    state.signUp.mockResolvedValue({ error: { message: 'อีเมลถูกใช้แล้ว' } })
+    render(<LoginPage />)
+
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+    await user.type(screen.getByLabelText('Email'), 'new@pm.local')
+    await user.type(screen.getByLabelText('Password'), 'password123')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByText('อีเมลถูกใช้แล้ว')).toBeInTheDocument()
+    expect(state.navigate).not.toHaveBeenCalled()
+  })
+
+  it('สมัครสมาชิก fail ไม่มี message → ใช้ default text', async () => {
+    const user = userEvent.setup()
+    state.signUp.mockResolvedValue({ error: {} })
+    render(<LoginPage />)
+
+    await user.click(screen.getByRole('button', { name: 'Sign up' }))
+    await user.type(screen.getByLabelText('Email'), 'new@pm.local')
+    await user.type(screen.getByLabelText('Password'), 'password123')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByText('Sign up failed')).toBeInTheDocument()
+  })
 })

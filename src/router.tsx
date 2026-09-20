@@ -20,6 +20,11 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
+    // โหลดนานเกิน 400ms → แสดง skeleton ของ route (pendingComponent)
+    defaultPendingMs: 400,
+    // ครอบทุก client navigation ด้วย document.startViewTransition
+    // (element ที่มี view-transition-name จะ morph ระหว่างหน้าโดยอัตโนมัติ)
+    defaultViewTransition: true,
   })
 
   // dehydrate query cache ลง SSR stream + hydrate ฝั่ง client

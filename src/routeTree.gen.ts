@@ -12,9 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppAccessRouteImport } from './routes/_app/access'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
+import { Route as AppTimeEntriesRouteImport } from './routes/_app/time-entries'
 import { Route as AppUsersRouteImport } from './routes/_app/users'
+import { Route as AppIssuesIssueIdRouteImport } from './routes/_app/issues.$issueId'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app/projects.index'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app/projects.$projectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -33,6 +36,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppAccessRoute = AppAccessRouteImport.update({
+  id: '/access',
+  path: '/access',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -43,9 +51,19 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppTimeEntriesRoute = AppTimeEntriesRouteImport.update({
+  id: '/time-entries',
+  path: '/time-entries',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppIssuesIssueIdRoute = AppIssuesIssueIdRouteImport.update({
+  id: '/issues/$issueId',
+  path: '/issues/$issueId',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
@@ -67,19 +85,25 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/access': typeof AppAccessRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
+  '/time-entries': typeof AppTimeEntriesRoute
   '/users': typeof AppUsersRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/projects/': typeof AppProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/access': typeof AppAccessRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
+  '/time-entries': typeof AppTimeEntriesRoute
   '/users': typeof AppUsersRoute
   '/': typeof AppIndexRoute
+  '/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/projects': typeof AppProjectsIndexRoute
@@ -88,10 +112,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/access': typeof AppAccessRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/time-entries': typeof AppTimeEntriesRoute
   '/_app/users': typeof AppUsersRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/issues/$issueId': typeof AppIssuesIssueIdRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
@@ -101,19 +128,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/access'
     | '/reports'
     | '/settings'
+    | '/time-entries'
     | '/users'
+    | '/issues/$issueId'
     | '/projects/$projectId'
     | '/api/auth/$'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/access'
     | '/reports'
     | '/settings'
+    | '/time-entries'
     | '/users'
     | '/'
+    | '/issues/$issueId'
     | '/projects/$projectId'
     | '/api/auth/$'
     | '/projects'
@@ -121,10 +154,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/login'
+    | '/_app/access'
     | '/_app/reports'
     | '/_app/settings'
+    | '/_app/time-entries'
     | '/_app/users'
     | '/_app/'
+    | '/_app/issues/$issueId'
     | '/_app/projects/$projectId'
     | '/api/auth/$'
     | '/_app/projects/'
@@ -159,6 +195,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/access': {
+      id: '/_app/access'
+      path: '/access'
+      fullPath: '/access'
+      preLoaderRoute: typeof AppAccessRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/reports': {
       id: '/_app/reports'
       path: '/reports'
@@ -173,11 +216,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/time-entries': {
+      id: '/_app/time-entries'
+      path: '/time-entries'
+      fullPath: '/time-entries'
+      preLoaderRoute: typeof AppTimeEntriesRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/users': {
       id: '/_app/users'
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/issues/$issueId': {
+      id: '/_app/issues/$issueId'
+      path: '/issues/$issueId'
+      fullPath: '/issues/$issueId'
+      preLoaderRoute: typeof AppIssuesIssueIdRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/projects/': {
@@ -205,19 +262,25 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppAccessRoute: typeof AppAccessRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppTimeEntriesRoute: typeof AppTimeEntriesRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppIssuesIssueIdRoute: typeof AppIssuesIssueIdRoute
   AppProjectsProjectIdRoute: typeof AppProjectsProjectIdRoute
   AppProjectsIndexRoute: typeof AppProjectsIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppAccessRoute: AppAccessRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppTimeEntriesRoute: AppTimeEntriesRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
+  AppIssuesIssueIdRoute: AppIssuesIssueIdRoute,
   AppProjectsProjectIdRoute: AppProjectsProjectIdRoute,
   AppProjectsIndexRoute: AppProjectsIndexRoute,
 }

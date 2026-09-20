@@ -31,6 +31,9 @@ export default defineConfig({
         'src/**/*.functions.ts',
         // server API endpoint (better-auth handler passthrough)
         'src/routes/api/**',
+        // shadcn primitives — โค้ด vendored ตาม convention เดิม (eslint ก็ override ไว้)
+        // ครอบคลุมผ่าน feature tests ที่ render ผ่าน drawer/dialog จริง
+        'src/components/ui/**',
         // ตัว test เอง
         'src/test/**',
         'src/**/*.test.{ts,tsx}',
