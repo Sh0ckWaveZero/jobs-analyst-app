@@ -204,18 +204,20 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                   />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {!isArchived &&
-                    (canManage ||
-                      session?.user.id === issue.reporterId ||
-                      session?.user.id === issue.assigneeId) && (
-                      <>
-                        <LogWorkDrawer projectId={pid} issue={issue} />
-                        <EditIssueDrawer issue={issue} />
-                      </>
+                  <div className="flex items-center justify-end gap-1">
+                    {!isArchived &&
+                      (canManage ||
+                        session?.user.id === issue.reporterId ||
+                        session?.user.id === issue.assigneeId) && (
+                        <>
+                          <LogWorkDrawer projectId={pid} issue={issue} />
+                          <EditIssueDrawer issue={issue} />
+                        </>
+                      )}
+                    {!isArchived && canManage && (
+                      <DeleteIssueButton issueId={issue.id} />
                     )}
-                  {!isArchived && canManage && (
-                    <DeleteIssueButton issueId={issue.id} />
-                  )}
+                  </div>
                 </td>
               </tr>
             ))}

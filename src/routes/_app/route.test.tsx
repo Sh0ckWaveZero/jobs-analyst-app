@@ -10,6 +10,10 @@ const state = vi.hoisted(() => ({ pathname: '/' }))
 vi.mock('@/components/layout/app-sidebar', () => ({
   AppSidebar: () => <div data-testid="sidebar">SIDEBAR</div>,
 }))
+vi.mock('@/components/layout/command-menu', () => ({
+  CommandMenu: () => <div data-testid="command-menu">COMMAND MENU</div>,
+  NotificationsMenu: () => <div data-testid="notifications">NOTIFICATIONS</div>,
+}))
 vi.mock('@/features/auth/auth.functions', () => ({ getSession: vi.fn() }))
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute:
